@@ -1,8 +1,17 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import { useAuthStore } from '@/stores/auth';
 
-export const BASE_URL =
-  import.meta.env.VITE_API_ENV === "production" ? "/api" : "http://localhost:3001/api";
+// Détection automatique de l'environnement de production
+const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
+
+export const BASE_URL = isProduction ? "/api" : "http://localhost:3001/api";
+
+console.log('🔧 API Configuration:', {
+  'import.meta.env.PROD': import.meta.env.PROD,
+  'window.location.hostname': window.location.hostname,
+  isProduction,
+  BASE_URL
+});
 
 const axiosInstance = axios.create({ baseURL: BASE_URL });
 
