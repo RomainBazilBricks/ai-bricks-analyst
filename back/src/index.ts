@@ -6,11 +6,18 @@ import { initializeDefaultAnalysisSteps } from '@/controllers/workflow.controlle
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
+const HOST = process.env.HOST || '0.0.0.0';
 
-app.listen(PORT, async () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, async () => {
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  console.log(`✅ Health check available at: http://${HOST}:${PORT}/api/health`);
   
-  // Initialiser les étapes d'analyse par défaut
-  await initializeDefaultAnalysisSteps();
+  try {
+    // Initialiser les étapes d'analyse par défaut
+    await initializeDefaultAnalysisSteps();
+    console.log(`✅ Default analysis steps initialized`);
+  } catch (error) {
+    console.error(`❌ Error initializing default analysis steps:`, error);
+  }
 });

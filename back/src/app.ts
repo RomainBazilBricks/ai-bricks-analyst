@@ -2,6 +2,8 @@ import 'module-alias/register';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
 import usersRoutes from '@/routes/users.routes';
 import authRoutes from '@/routes/auth.routes';
 import projectRoutes from '@/routes/projects.routes';
@@ -45,8 +47,26 @@ app.use('/api/workflow', workflowRoutes);
 app.use('/api/ai-credentials', aiCredentialsRoutes);
 
 // Health check pour Railway
-app.get('/api/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    // Test basique de la base de données
+    await db.execute(sql`SELECT 1`);
+    
+    res.status(200).json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    console.error('❌ Health check failed:', error);
+    res.status(503).json({ 
+      status: 'ERROR', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: (error as Error).message
+    });
+  }
 });
 
 // Catch-all handler: renvoie l'index.html pour toutes les routes non-API en production
