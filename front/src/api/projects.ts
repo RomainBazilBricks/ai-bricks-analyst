@@ -1,0 +1,79 @@
+import { useFetcher, useMutator } from "@/api/api";
+import type { 
+  CreateProjectInput, 
+  ProjectResponse, 
+  PaginatedProjectsResponse,
+  ProjectWithDocumentsResponse,
+  DocumentResponse,
+  PostSynthesisInput,
+  SynthesisResponse,
+  UpdateProjectConversationInput
+} from "@shared/types/projects";
+
+/**
+ * Hook pour récupérer tous les projets avec pagination par cursor
+ */
+export const useGetAllProjects = (options = {}) =>
+  useFetcher<undefined, PaginatedProjectsResponse>({
+    key: ["projects"],
+    path: "/projects",
+    options,
+  });
+
+/**
+ * Hook pour récupérer les projets avec pagination personnalisée
+ */
+export const useGetPaginatedProjects = (cursor?: string, limit = 10, direction = 'next', options = {}) =>
+  useFetcher<undefined, PaginatedProjectsResponse>({
+    key: ["projects", "paginated", cursor, limit, direction],
+    path: `/projects?${new URLSearchParams({
+      ...(cursor && { cursor }),
+      limit: limit.toString(),
+      direction
+    })}`,
+    options,
+  });
+
+/**
+ * Hook pour créer un nouveau projet avec téléchargement de fichiers
+ */
+export const useCreateProject = (options = {}) =>
+  useMutator<CreateProjectInput, ProjectWithDocumentsResponse>("/projects", options);
+
+/**
+ * Hook pour récupérer les documents d'un projet spécifique
+ */
+export const useGetProjectDocuments = (projectUniqueId: string, options = {}) =>
+  useFetcher<undefined, DocumentResponse[]>({
+    key: ["projects", projectUniqueId, "documents"],
+    path: `/projects/${projectUniqueId}/documents`,
+    options: {
+      enabled: !!projectUniqueId,
+      ...options,
+    },
+  });
+
+/**
+ * Hook pour récupérer un projet spécifique avec tous ses détails
+ */
+export const useGetProjectById = (projectUniqueId: string, options = {}) =>
+  useFetcher<undefined, ProjectWithDocumentsResponse>({
+    key: ["projects", projectUniqueId],
+    path: `/projects/${projectUniqueId}`,
+    options: {
+      enabled: !!projectUniqueId,
+      ...options,
+    },
+  });
+
+/**
+ * Hook pour envoyer une synthèse ManusAI
+ */
+export const usePostSynthesis = (options = {}) =>
+  useMutator<PostSynthesisInput, SynthesisResponse>("/projects/synthesis", options);
+
+/**
+ * Hook pour mettre à jour l'URL de conversation d'un projet
+ */
+export const useUpdateProjectConversationUrl = (options = {}) =>
+  useMutator<UpdateProjectConversationInput, ProjectResponse>("/projects/conversation-url", options); 

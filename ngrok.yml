@@ -1,0 +1,11 @@
+version: "3"
+agent:
+    authtoken: 30YCiOyqVaV0SNVVJEMonEBpqQx_6yCoEY86TU6rTYm5orn6a
+
+tunnels:
+    app3000:
+        proto: http
+        addr: 3000
+    app3001:
+        proto: http
+        addr: 3001 

@@ -1,0 +1,123 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## 1. Types partagés obligatoires
+- **OBLIGATOIRE** : Tous les types d'API doivent être définis dans [shared/types](mdc:shared/types)
+- **INTERDIT** : Définir des types d'API dans front/ ou back/
+- Structure existante : [users.d.ts](mdc:shared/types/users.d.ts)
+- Exemple de structure type :
+```ts
+// shared/types/projects.d.ts
+export type Project = {
+  id: number;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CreateProjectInput = {
+  name: string;
+  description?: string;
+};
+
+export type UpdateProjectInput = {
+  name?: string;
+  description?: string;
+};
+
+export type ProjectResponse = Project;
+
+export type PaginatedProjectsResponse = {
+  items: Project[];
+  nextCursor: number | null;
+  hasMore: boolean;
+};
+```
+
+## 2. Interdiction totale des any
+- **INTERDIT** : Utiliser `any` dans toute la codebase
+- **OBLIGATOIRE** : Typer explicitement toutes les variables, paramètres et retours
+- **OBLIGATOIRE** : Utiliser `unknown` si le type n'est pas connu
+- Configuration TypeScript stricte requise :
+```json
+{
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+## 3. Typage des réponses API
+- **OBLIGATOIRE** : Typer tous les hooks d'API avec les types partagés
+- Exemple correct dans [users.ts](mdc:front/src/api/users.ts)
+- Structure recommandée :
+```ts
+import type { UserResponse, CreateUserInput } from '@shared/types/users';
+
+export const useGetAllUsers = (options = {}) => {
+  return useFetcher<undefined, UserResponse[]>({
+    key: ["users"],
+    path: "/api/users",
+    options,
+  });
+};
+
+export const useCreateUser = (options = {}) => {
+  return useMutator<CreateUserInput, UserResponse>("/api/users", options);
+};
+```
+
+## 4. Typage des stores Zustand
+- **OBLIGATOIRE** : Typer toutes les interfaces des stores
+- **OBLIGATOIRE** : Utiliser les types partagés dans les stores
+- Structure recommandée :
+```ts
+import type { User } from '@shared/types/users';
+
+interface AuthStore {
+  user: User | null;
+  isAuthenticated: boolean;
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthStore>()((set, get) => ({
+  // Implémentation
+}));
+```
+
+## 5. Typage des paramètres de requête
+- **OBLIGATOIRE** : Typer tous les paramètres de requête backend
+- **OBLIGATOIRE** : Utiliser les types partagés
+- Structure recommandée :
+```ts
+import type { CreateUserInput, UserResponse } from '@shared/types/users';
+
+export const createUser = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userData: CreateUserInput = req.body;
+    // Validation et logique
+    const user: UserResponse = await db.insert(users).values(userData).returning();
+    res.status(201).json(user);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+};
+```
+
+## 6. Règles de nommage des types
+- **OBLIGATOIRE** : Suffixer les types d'entrée par `Input`
+- **OBLIGATOIRE** : Suffixer les types de sortie par `Response`
+- **OBLIGATOIRE** : Suffixer les types paginés par `PaginatedResponse`
+- **OBLIGATOIRE** : Utiliser PascalCase pour tous les types
+- Exemples corrects :
+  - `CreateUserInput`
+  - `UserResponse`
+  - `PaginatedUsersResponse`
+  - `UpdateProjectInput`

@@ -1,0 +1,21 @@
+{
+    "name": "ai-boosted-project",
+    "private": true,
+    "workspaces": [
+      "back",
+      "front"
+    ],
+    "scripts": {
+      "dev": "concurrently -n BACK,FRONT,NGROK -c green,cyan,magenta \"npm run dev -w back\" \"npm run dev -w front\" \"./start-ngrok.sh\"",
+      "dev:sequential": "./dev-with-ngrok.sh",
+      "dev:back": "npm run dev -w back",
+      "dev:front": "npm run dev -w front",
+      "dev:ngrok": "./start-ngrok.sh",
+      "stop:ngrok": "./stop-ngrok.sh",
+      "build": "npm run build -w back && npm run build -w front",
+      "clean": "npm run clean -w back"
+    },
+    "devDependencies": {
+      "concurrently": "^8.2.2"
+    }
+  }

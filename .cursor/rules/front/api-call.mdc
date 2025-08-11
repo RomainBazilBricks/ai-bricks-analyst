@@ -1,0 +1,101 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Guide : créer un nouveau hook d'API front
+
+## 1. Déclarer les types partagés
+Ajoutez (ou modifiez) les définitions TypeScript dans un fichier du dossier   
+`[shared/types](mdc:shared/types)` — par exemple :  
+```ts
+export type Project = { id: number; name: string };
+export type CreateProjectInput = { name: string };
+```
+
+## 2. Créer le hook métier
+Dans `front/src/api/`, ajoutez un fichier `projects.ts` :  
+```ts
+import { useFetcher, useMutator } from "@/api/api"; // helpers génériques
+import type { Project, CreateProjectInput } from "@shared/types/projects";
+
+export const useGetAllProjects = (options = {}) =>
+  useFetcher<undefined, Project[]>({
+    key: ["projects"],          // clé de cache React-Query
+    path: "/api/projects",      // endpoint backend
+    options,
+  });
+
+export const useCreateProject = (options = {}) =>
+  useMutator<CreateProjectInput, Project>("/api/projects", options);
+```
+Les helpers `useFetcher` et `useMutator` proviennent de  
+`[api.ts](mdc:front/src/api/api.ts)` et s'appuient sur l'instance Axios définie dans  
+`[axios.ts](mdc:front/src/api/axios.ts)`.
+
+## 3. Consommer le hook dans une page/composant
+Exemple minimal :
+```tsx
+import { queryClient } from "@/api/query-config";
+import { useGetAllProjects, useCreateProject } from "@/api/projects";
+…
+const { data } = useGetAllProjects();
+const { mutateAsync } = useCreateProject({
+    // Uniquement si une liste est rattachée à cette logique
+  onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+});
+```
+
+## 4. Exposer la route côté front
+Dans `[use-app-routes.tsx](mdc:front/src/navigation/use-app-routes.tsx)` :
+```ts
+import { ProjectsPage } from "@/pages/projects";
+…
+export enum AppRoutes {
+  home = "/",
+  projects = "/projects",
+}
+…
+config: [
+  { path: Routes.home, element: <HomePage /> },
+  { path: Routes.projects, element: <ProjectsPage /> },
+],
+```
+
+## 5. Règles générales
+- Toujours typer les entrées/sorties avec les types du dossier **shared**.  
+- Un hook = un endpoint (lecture : `useFetcher`, écriture : `useMutator`).  
+- Un seul niveau d'appel : composant ➜ hook métier ➜ helpers React-Query/ Axios.  
+- Invalider explicitement le cache React-Query après une mutation.
+
+# Règles d'appel API et gestion d'état front
+
+## 1. Utilisation des hooks d'API (React Query)
+- Les hooks d'API doivent exposer les états `isLoading`, `isError`, `error`, `isSuccess`, etc.
+- Les composants doivent utiliser ces états **directement** pour l'affichage (erreur, loading, etc.).
+- **INTERDIT** : Dupliquer ces états dans des `useState` locaux (ex : `const [error, setError] = useState()` pour une mutation déjà gérée par le hook).
+- Exemple correct :
+```tsx
+const { mutateAsync, isPending, isError, error } = useLogin();
+<Button disabled={isPending}>Connexion</Button>
+{isError && <div>{error.message}</div>}
+```
+
+## 2. Stores Zustand et hooks d'API
+- Les stores Zustand ne doivent **jamais** appeler de hook d'API ou effectuer de requête réseau.
+- Les stores Zustand doivent uniquement exposer des setters synchrones (`setUser`, `logout`, etc.)
+- Les composants ou hooks d'API doivent mettre à jour le store **après** le succès d'une mutation ou d'un fetch.
+- Exemple correct :
+```tsx
+const { mutateAsync } = useLogin();
+const login = useAuthStore((s) => s.login);
+const handleSubmit = async () => {
+  const data = await mutateAsync({ ... });
+  login(data.user, data.token);
+};
+```
+
+## 3. Pattern global
+- Pattern imposé :
+  - Composant ➔ Hook d'API (React Query) ➔ Store Zustand (setters synchrones)
+  - **Jamais** l'inverse (store qui appelle un hook d'API)
