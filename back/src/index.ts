@@ -1,4 +1,4 @@
-import 'module-alias/register';
+import './alias-config';
 
 import app from './app';
 import dotenv from 'dotenv';
@@ -6,7 +6,7 @@ import { initializeDefaultAnalysisSteps } from '@/controllers/workflow.controlle
 
 dotenv.config();
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
 app.listen(PORT, HOST, async () => {
