@@ -312,7 +312,7 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
 
               {/* Liste des étapes */}
               <div className="space-y-3">
-                {displaySteps.map((step, index) => (
+                {displaySteps.map((step) => (
                   <div 
                     key={step.id} 
                     className={`border rounded-lg p-4 transition-colors ${getStatusColor(step.status)}`}

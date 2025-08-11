@@ -65,7 +65,7 @@ export const AiCredentialsPage = () => {
     }
   });
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (_id: number) => {
     if (confirm('Êtes-vous sûr de vouloir désactiver ce credential ?')) {
       await deleteCredential(undefined);
     }
