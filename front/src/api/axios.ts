@@ -2,7 +2,7 @@ import axios, { type AxiosRequestConfig } from "axios";
 import { useAuthStore } from '@/stores/auth';
 
 export const BASE_URL =
-  import.meta.env.VITE_API_ENV === "production" ? "/api-prod" : "http://localhost:3001/api";
+  import.meta.env.VITE_API_ENV === "production" ? "/api" : "http://localhost:3001/api";
 
 const axiosInstance = axios.create({ baseURL: BASE_URL });
 
