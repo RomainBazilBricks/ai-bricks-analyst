@@ -13,7 +13,7 @@
     "dev:ngrok": "./start-ngrok.sh",
     "stop:ngrok": "./stop-ngrok.sh",
     "build": "npm run build -w back && npm run build -w front",
-    "build:production": "npm ci --omit=dev && npm run build -w front && npm run build -w back && npm run copy:frontend",
+    "build:production": "npm ci && npm run build -w front && npm run build -w back && npm run copy:frontend",
     "copy:frontend": "cp -r front/dist/* back/dist/public/",
     "start:production": "cd back && npm start",
     "clean": "npm run clean -w back"
