@@ -71,8 +71,13 @@ app.get('/api/health', async (req: Request, res: Response) => {
 
 // Catch-all handler: renvoie l'index.html pour toutes les routes non-API en production
 if (isProduction) {
-  app.get('*', (req: Request, res: Response) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  app.use((req: Request, res: Response) => {
+    // Vérifier que ce n'est pas une route API
+    if (!req.path.startsWith('/api/')) {
+      res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    } else {
+      res.status(404).json({ error: 'API endpoint not found' });
+    }
   });
 }
 
