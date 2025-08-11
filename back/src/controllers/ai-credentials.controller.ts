@@ -280,14 +280,17 @@ export const deleteAiCredential = async (req: Request, res: Response): Promise<a
  */
 export const getCredentialByPlatformAndUser = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { platform, userIdentifier } = req.params;
+    const { platform, userIdentifier: encodedUserIdentifier } = req.params;
     
-    if (!platform || !userIdentifier) {
+    if (!platform || !encodedUserIdentifier) {
       return res.status(400).json({ 
         error: 'Plateforme et identifiant utilisateur requis',
         code: 'MISSING_PARAMETERS'
       });
     }
+    
+    // Décoder le userIdentifier depuis base64
+    const userIdentifier = Buffer.from(encodedUserIdentifier, 'base64').toString('utf-8');
     
     const result = await db
       .select()

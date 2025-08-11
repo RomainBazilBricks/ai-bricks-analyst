@@ -30,6 +30,7 @@ router.post('/:id/update', updateAiCredential);
 router.post('/:id/delete', deleteAiCredential);
 
 // GET /api/ai-credentials/platform/:platform/user/:userIdentifier - Récupère le credential actif pour une plateforme et un utilisateur
+// Note: userIdentifier doit être encodé en base64 pour éviter les problèmes avec @ et .
 router.get('/platform/:platform/user/:userIdentifier', getCredentialByPlatformAndUser);
 
 export default router; 
