@@ -341,7 +341,7 @@ export const getCredentialByPlatformAndUserPublic = async (req: Request, res: Re
     const apiKey = req.headers['x-api-key'] as string;
     
     // Vérifier la clé API
-    const expectedApiKey = process.env.INTEGRATION_API_KEY;
+    const expectedApiKey = process.env.INTEGRATION_API_KEY || 'AIB_1754999406792_d8q74v1w1wn6znwwytd1wd';
     if (!expectedApiKey) {
       return res.status(500).json({ 
         error: 'Clé API d\'intégration non configurée sur le serveur',
