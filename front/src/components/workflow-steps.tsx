@@ -257,7 +257,7 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
                 </Button>
               </div>
             </div>
-          ) : displaySteps.length === 0 ? (
+          ) : displaySteps.length === 0 && !(isWorkflowError && (workflowError as any)?.response?.status === 404) ? (
             <div className="text-center py-8">
               <Brain className="h-12 w-12 mx-auto mb-3 text-gray-300" />
               <p className="text-lg font-medium text-gray-900 mb-2">Aucune étape disponible</p>
