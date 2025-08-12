@@ -31,19 +31,19 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
     const existingSteps = await db.select().from(analysisSteps).limit(1);
     
     if (existingSteps.length === 0) {
-      // Créer les 4 étapes par défaut
+      // Créer les 5 étapes par défaut
       const defaultSteps = [
-        {
-          name: 'Vue d\'ensemble du projet',
-          description: 'Une description générale de quelques lignes sur le projet',
-          prompt: 'Analysez les documents fournis et rédigez une vue d\'ensemble concise du projet d\'investissement immobilier en 3-5 lignes maximum. Focalisez-vous sur les éléments clés : type de bien, localisation, objectif d\'investissement et rentabilité attendue.',
-          order: 1,
-          isActive: 1
-        },
         {
           name: 'Analyse globale',
           description: 'Une analyse détaillée et approfondie du projet',
           prompt: 'Réalisez une analyse détaillée et structurée du projet d\'investissement. Incluez : 1) Analyse financière (rentabilité, cash-flow, ROI), 2) Analyse du marché local, 3) Évaluation des risques, 4) Points forts et faiblesses, 5) Recommandations stratégiques. Soyez précis et utilisez les données des documents fournis.',
+          order: 1,
+          isActive: 1
+        },
+        {
+          name: 'Vue d\'ensemble du projet',
+          description: 'Une description générale de quelques lignes sur le projet',
+          prompt: 'Analysez les documents fournis et rédigez une vue d\'ensemble concise du projet d\'investissement immobilier en 3-5 lignes maximum. Focalisez-vous sur les éléments clés : type de bien, localisation, objectif d\'investissement et rentabilité attendue.',
           order: 2,
           isActive: 1
         },
@@ -55,10 +55,17 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
           isActive: 1
         },
         {
+          name: 'Points de vigilance',
+          description: 'Identification des risques critiques qui pourraient compromettre le financement',
+          prompt: 'Analysez le projet d\'investissement immobilier et identifiez tous les points de vigilance critiques qui pourraient compromettre l\'obtention du financement. Organisez votre analyse en catégories : 1) Risques financiers (ratio d\'endettement, capacité de remboursement, apport personnel), 2) Risques juridiques (servitudes, litiges, conformité), 3) Risques techniques (état du bien, travaux nécessaires, diagnostics), 4) Risques de marché (localisation, évolution des prix, demande locative). Pour chaque point, évaluez le niveau de criticité et proposez des solutions ou documents complémentaires.',
+          order: 4,
+          isActive: 1
+        },
+        {
           name: 'Rédaction d\'un message',
           description: 'Un message qui récapitule le projet et liste les documents manquants',
           prompt: 'Rédigez un message de synthèse professionnel destiné au client qui : 1) Récapitule le projet en quelques phrases, 2) Présente les conclusions principales de l\'analyse, 3) Liste clairement les documents manquants requis, 4) Propose les prochaines étapes. Le ton doit être professionnel mais accessible.',
-          order: 4,
+          order: 5,
           isActive: 1
         }
       ];
@@ -493,8 +500,34 @@ export const updateDocumentsStep = async (req: Request, res: Response): Promise<
 };
 
 /**
- * Endpoint pour l'étape 4: Rédaction d'un message
- * @route POST /api/workflow/step-4-message
+ * Endpoint pour l'étape 4: Points de vigilance
+ * @route POST /api/workflow/step-4-vigilance
+ */
+export const updateVigilanceStep = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, content, manusConversationUrl }: WorkflowStepEndpointInput = req.body;
+
+    const updateData: UpdateWorkflowStepInput = {
+      projectUniqueId,
+      stepId: 4,
+      status: 'completed',
+      content,
+      manusConversationUrl
+    };
+
+    req.body = updateData;
+    return await updateWorkflowStep(req, res);
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'UPDATE_VIGILANCE_STEP_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour l'étape 5: Rédaction d'un message
+ * @route POST /api/workflow/step-5-message
  */
 export const updateMessageStep = async (req: Request, res: Response): Promise<any> => {
   try {
@@ -502,7 +535,7 @@ export const updateMessageStep = async (req: Request, res: Response): Promise<an
 
     const updateData: UpdateWorkflowStepInput = {
       projectUniqueId,
-      stepId: 4,
+      stepId: 5,
       status: 'completed',
       content,
       manusConversationUrl

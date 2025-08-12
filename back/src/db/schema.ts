@@ -53,7 +53,7 @@ export const analysisSteps = pgTable('analysis_steps', {
   name: varchar('name', { length: 256 }).notNull().unique(),
   description: text('description').notNull(),
   prompt: text('prompt').notNull(), // Prompt stocké pour cette étape
-  order: integer('order').notNull(), // Ordre d'exécution (1, 2, 3, 4)
+  order: integer('order').notNull(), // Ordre d'exécution (1, 2, 3, 4, 5)
   isActive: integer('is_active').notNull().default(1), // 1 = actif, 0 = inactif
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

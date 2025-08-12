@@ -326,3 +326,86 @@ export const getCredentialByPlatformAndUser = async (req: Request, res: Response
     });
   }
 }; 
+
+/**
+ * Récupère le credential actif pour une plateforme et un utilisateur (endpoint public pour intégrations externes)
+ * @route GET /api/public/ai-credentials/platform/:platform/user/:userIdentifier
+ * @param {string} platform - Nom de la plateforme
+ * @param {string} userIdentifier - Identifiant de l'utilisateur (encodé en base64)
+ * @param {string} x-api-key - Clé API pour l'authentification (header)
+ * @returns {AiCredentialResponse} Le credential actif
+ */
+export const getCredentialByPlatformAndUserPublic = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { platform, userIdentifier: encodedUserIdentifier } = req.params;
+    const apiKey = req.headers['x-api-key'] as string;
+    
+    // Vérifier la clé API
+    const expectedApiKey = process.env.INTEGRATION_API_KEY;
+    if (!expectedApiKey) {
+      return res.status(500).json({ 
+        error: 'Clé API d\'intégration non configurée sur le serveur',
+        code: 'API_KEY_NOT_CONFIGURED'
+      });
+    }
+    
+    if (!apiKey || apiKey !== expectedApiKey) {
+      return res.status(401).json({ 
+        error: 'Clé API invalide ou manquante',
+        code: 'INVALID_API_KEY'
+      });
+    }
+    
+    if (!platform || !encodedUserIdentifier) {
+      return res.status(400).json({ 
+        error: 'Plateforme et identifiant utilisateur requis',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+    
+    // Décoder le userIdentifier depuis base64
+    const userIdentifier = Buffer.from(encodedUserIdentifier, 'base64').toString('utf-8');
+    
+    const result = await db
+      .select()
+      .from(aiCredentials)
+      .where(
+        and(
+          eq(aiCredentials.platform, platform),
+          eq(aiCredentials.userIdentifier, userIdentifier),
+          eq(aiCredentials.isActive, true)
+        )
+      )
+      .orderBy(desc(aiCredentials.lastUsedAt))
+      .limit(1);
+    
+    if (result.length === 0) {
+      return res.status(404).json({ 
+        error: 'Aucun credential actif trouvé pour cette plateforme et cet utilisateur',
+        code: 'NOT_FOUND',
+        details: {
+          platform,
+          userIdentifier: userIdentifier,
+          searchedFor: 'active credentials'
+        }
+      });
+    }
+    
+    // Mettre à jour lastUsedAt
+    await db
+      .update(aiCredentials)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(aiCredentials.id, result[0].id));
+    
+    // Log pour debugging
+    console.log(`✅ Credential récupéré pour ${platform}/${userIdentifier} (ID: ${result[0].id})`);
+    
+    res.json(result[0] as AiCredentialResponse);
+  } catch (error) {
+    console.error('❌ Erreur lors de la récupération du credential public:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+}; 

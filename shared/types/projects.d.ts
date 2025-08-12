@@ -167,13 +167,15 @@ export type WorkflowStepEndpointInput = {
   manusConversationUrl?: string;
 };
 
-// Types pour les 4 étapes spécifiques
+// Types pour les 5 étapes spécifiques
 export type OverviewStepInput = WorkflowStepEndpointInput;
 export type AnalysisStepInput = WorkflowStepEndpointInput;
 export type DocumentsStepInput = WorkflowStepEndpointInput;
+export type VigilanceStepInput = WorkflowStepEndpointInput;
 export type MessageStepInput = WorkflowStepEndpointInput;
 
 export type OverviewStepResponse = ProjectAnalysisWorkflowResponse;
 export type AnalysisStepResponse = ProjectAnalysisWorkflowResponse;
 export type DocumentsStepResponse = ProjectAnalysisWorkflowResponse;
+export type VigilanceStepResponse = ProjectAnalysisWorkflowResponse;
 export type MessageStepResponse = ProjectAnalysisWorkflowResponse; 

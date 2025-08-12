@@ -56,13 +56,13 @@ export const useUpdateWorkflowStep = (options = {}) =>
  */
 
 /**
- * Hook pour mettre à jour l'étape 1: Vue d'ensemble du projet
+ * Hook pour mettre à jour l'étape 1: Analyse globale
  */
 export const useUpdateOverviewStep = (options = {}) =>
   useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-1-overview", options);
 
 /**
- * Hook pour mettre à jour l'étape 2: Analyse globale
+ * Hook pour mettre à jour l'étape 2: Vue d'ensemble du projet
  */
 export const useUpdateAnalysisStep = (options = {}) =>
   useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-2-analysis", options);
@@ -74,10 +74,16 @@ export const useUpdateDocumentsStep = (options = {}) =>
   useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-3-documents", options);
 
 /**
- * Hook pour mettre à jour l'étape 4: Rédaction d'un message
+ * Hook pour mettre à jour l'étape 4: Points de vigilance
+ */
+export const useUpdateVigilanceStep = (options = {}) =>
+  useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-4-vigilance", options);
+
+/**
+ * Hook pour mettre à jour l'étape 5: Rédaction d'un message
  */
 export const useUpdateMessageStep = (options = {}) =>
-  useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-4-message", options);
+  useMutator<WorkflowStepEndpointInput, { message: string; step: any }>("/workflow/step-5-message", options);
 
 /**
  * Hook pour mettre à jour une étape d'analyse (prompt, description, etc.)

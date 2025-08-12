@@ -9,6 +9,7 @@ import {
   updateOverviewStep,
   updateAnalysisStep,
   updateDocumentsStep,
+  updateVigilanceStep,
   updateMessageStep
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
@@ -82,7 +83,7 @@ router.post('/update-step', authenticateJWT, updateWorkflowStep);
  */
 
 /**
- * Endpoint pour l'étape 1: Vue d'ensemble du projet
+ * Endpoint pour l'étape 1: Analyse globale
  * @route POST /api/workflow/step-1-overview
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
@@ -91,7 +92,7 @@ router.post('/update-step', authenticateJWT, updateWorkflowStep);
 router.post('/step-1-overview', updateOverviewStep);
 
 /**
- * Endpoint pour l'étape 2: Analyse globale
+ * Endpoint pour l'étape 2: Vue d'ensemble du projet
  * @route POST /api/workflow/step-2-analysis
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
@@ -109,12 +110,21 @@ router.post('/step-2-analysis', updateAnalysisStep);
 router.post('/step-3-documents', updateDocumentsStep);
 
 /**
- * Endpoint pour l'étape 4: Rédaction d'un message
- * @route POST /api/workflow/step-4-message
+ * Endpoint pour l'étape 4: Points de vigilance
+ * @route POST /api/workflow/step-4-vigilance
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
  * @access Public (pour Manus)
  */
-router.post('/step-4-message', updateMessageStep);
+router.post('/step-4-vigilance', updateVigilanceStep);
+
+/**
+ * Endpoint pour l'étape 5: Rédaction d'un message
+ * @route POST /api/workflow/step-5-message
+ * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
+ * @returns {Object} Message de confirmation
+ * @access Public (pour Manus)
+ */
+router.post('/step-5-message', updateMessageStep);
 
 export default router; 

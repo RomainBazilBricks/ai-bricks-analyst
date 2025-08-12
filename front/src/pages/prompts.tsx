@@ -18,7 +18,8 @@ import {
   MessageCircle,
   FileText,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 import type { AnalysisStepResponse, CreateAnalysisStepInput } from "@shared/types/projects";
@@ -52,10 +53,11 @@ export const PromptsPage = () => {
 
   const getStepIcon = (order: number) => {
     switch (order) {
-      case 1: return <Eye className="h-5 w-5" />;
-      case 2: return <BarChart3 className="h-5 w-5" />;
+      case 1: return <BarChart3 className="h-5 w-5" />;
+      case 2: return <Eye className="h-5 w-5" />;
       case 3: return <FolderOpen className="h-5 w-5" />;
-      case 4: return <MessageCircle className="h-5 w-5" />;
+      case 4: return <AlertTriangle className="h-5 w-5" />;
+      case 5: return <MessageCircle className="h-5 w-5" />;
       default: return <FileText className="h-5 w-5" />;
     }
   };
