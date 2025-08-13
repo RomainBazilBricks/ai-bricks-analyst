@@ -10,7 +10,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:push": "drizzle-kit push",
-    "drizzle:pull": "drizzle-kit pull"
+    "drizzle:pull": "drizzle-kit pull",
+    "update-prompts": "ts-node --require module-alias/register src/scripts/update-prompts.ts"
   },
   "author": "",
   "license": "ISC",

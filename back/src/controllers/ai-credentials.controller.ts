@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { and, gt, lt, desc, asc, eq, isNull } from 'drizzle-orm';
-import { aiCredentials, CreateAiCredentialSchema, UpdateAiCredentialSchema, GetAiCredentialsQuerySchema } from '../db/schema';
+import { ai_credentials, CreateAiCredentialSchema, UpdateAiCredentialSchema, GetAiCredentialsQuerySchema } from '../db/schema';
 import { db } from '../db';
 import type { 
   CreateAiCredentialInput, 
@@ -26,28 +26,28 @@ export const getPaginatedAiCredentials = async (req: Request, res: Response): Pr
     const queryParams = GetAiCredentialsQuerySchema.parse(req.query);
     const { cursor, limit = 10, direction = 'next', platform, userIdentifier, isActive } = queryParams;
     
-    const query = db.select().from(aiCredentials);
+    const query = db.select().from(ai_credentials);
     
     // Construire les conditions de filtrage
     const conditions = [];
     
     if (cursor) {
       const condition = direction === 'next' 
-        ? gt(aiCredentials.id, Number(cursor))
-        : lt(aiCredentials.id, Number(cursor));
+        ? gt(ai_credentials.id, Number(cursor))
+        : lt(ai_credentials.id, Number(cursor));
       conditions.push(condition);
     }
     
     if (platform) {
-      conditions.push(eq(aiCredentials.platform, platform));
+      conditions.push(eq(ai_credentials.platform, platform));
     }
     
     if (userIdentifier) {
-      conditions.push(eq(aiCredentials.userIdentifier, userIdentifier));
+      conditions.push(eq(ai_credentials.userIdentifier, userIdentifier));
     }
     
     if (isActive !== undefined) {
-      conditions.push(eq(aiCredentials.isActive, isActive));
+      conditions.push(eq(ai_credentials.isActive, isActive));
     }
     
     if (conditions.length > 0) {
@@ -55,7 +55,7 @@ export const getPaginatedAiCredentials = async (req: Request, res: Response): Pr
     }
     
     const results = await query
-      .orderBy(direction === 'next' ? asc(aiCredentials.id) : desc(aiCredentials.id))
+      .orderBy(direction === 'next' ? asc(ai_credentials.id) : desc(ai_credentials.id))
       .limit(Number(limit) + 1);
     
     const hasMore = results.length > Number(limit);
@@ -96,8 +96,8 @@ export const getAiCredentialById = async (req: Request, res: Response): Promise<
     
     const result = await db
       .select()
-      .from(aiCredentials)
-      .where(eq(aiCredentials.id, Number(id)))
+      .from(ai_credentials)
+      .where(eq(ai_credentials.id, Number(id)))
       .limit(1);
     
     if (result.length === 0) {
@@ -109,9 +109,9 @@ export const getAiCredentialById = async (req: Request, res: Response): Promise<
     
     // Mettre à jour lastUsedAt
     await db
-      .update(aiCredentials)
+      .update(ai_credentials)
       .set({ lastUsedAt: new Date() })
-      .where(eq(aiCredentials.id, Number(id)));
+      .where(eq(ai_credentials.id, Number(id)));
     
     res.json(result[0] as AiCredentialResponse);
   } catch (error) {
@@ -143,7 +143,7 @@ export const createAiCredential = async (req: Request, res: Response): Promise<a
     };
     
     const result = await db
-      .insert(aiCredentials)
+      .insert(ai_credentials)
       .values(newCredential)
       .returning();
     
@@ -179,8 +179,8 @@ export const updateAiCredential = async (req: Request, res: Response): Promise<a
     // Vérifier que le credential existe
     const existing = await db
       .select()
-      .from(aiCredentials)
-      .where(eq(aiCredentials.id, Number(id)))
+      .from(ai_credentials)
+      .where(eq(ai_credentials.id, Number(id)))
       .limit(1);
     
     if (existing.length === 0) {
@@ -207,9 +207,9 @@ export const updateAiCredential = async (req: Request, res: Response): Promise<a
     if (validatedData.isActive !== undefined) updateData.isActive = validatedData.isActive;
     
     const result = await db
-      .update(aiCredentials)
+      .update(ai_credentials)
       .set(updateData)
-      .where(eq(aiCredentials.id, Number(id)))
+      .where(eq(ai_credentials.id, Number(id)))
       .returning();
     
     res.json(result[0] as AiCredentialResponse);
@@ -241,8 +241,8 @@ export const deleteAiCredential = async (req: Request, res: Response): Promise<a
     // Vérifier que le credential existe
     const existing = await db
       .select()
-      .from(aiCredentials)
-      .where(eq(aiCredentials.id, Number(id)))
+      .from(ai_credentials)
+      .where(eq(ai_credentials.id, Number(id)))
       .limit(1);
     
     if (existing.length === 0) {
@@ -254,12 +254,12 @@ export const deleteAiCredential = async (req: Request, res: Response): Promise<a
     
     // Soft delete : désactiver le credential
     const result = await db
-      .update(aiCredentials)
+      .update(ai_credentials)
       .set({ 
         isActive: false,
         updatedAt: new Date()
       })
-      .where(eq(aiCredentials.id, Number(id)))
+      .where(eq(ai_credentials.id, Number(id)))
       .returning();
     
     res.json(result[0] as AiCredentialResponse);
@@ -294,15 +294,15 @@ export const getCredentialByPlatformAndUser = async (req: Request, res: Response
     
     const result = await db
       .select()
-      .from(aiCredentials)
+      .from(ai_credentials)
       .where(
         and(
-          eq(aiCredentials.platform, platform),
-          eq(aiCredentials.userIdentifier, userIdentifier),
-          eq(aiCredentials.isActive, true)
+          eq(ai_credentials.platform, platform),
+          eq(ai_credentials.userIdentifier, userIdentifier),
+          eq(ai_credentials.isActive, true)
         )
       )
-      .orderBy(desc(aiCredentials.lastUsedAt))
+      .orderBy(desc(ai_credentials.lastUsedAt))
       .limit(1);
     
     if (result.length === 0) {
@@ -314,9 +314,9 @@ export const getCredentialByPlatformAndUser = async (req: Request, res: Response
     
     // Mettre à jour lastUsedAt
     await db
-      .update(aiCredentials)
+      .update(ai_credentials)
       .set({ lastUsedAt: new Date() })
-      .where(eq(aiCredentials.id, result[0].id));
+      .where(eq(ai_credentials.id, result[0].id));
     
     res.json(result[0] as AiCredentialResponse);
   } catch (error) {
@@ -368,15 +368,15 @@ export const getCredentialByPlatformAndUserPublic = async (req: Request, res: Re
     
     const result = await db
       .select()
-      .from(aiCredentials)
+      .from(ai_credentials)
       .where(
         and(
-          eq(aiCredentials.platform, platform),
-          eq(aiCredentials.userIdentifier, userIdentifier),
-          eq(aiCredentials.isActive, true)
+          eq(ai_credentials.platform, platform),
+          eq(ai_credentials.userIdentifier, userIdentifier),
+          eq(ai_credentials.isActive, true)
         )
       )
-      .orderBy(desc(aiCredentials.lastUsedAt))
+      .orderBy(desc(ai_credentials.lastUsedAt))
       .limit(1);
     
     if (result.length === 0) {
@@ -393,9 +393,9 @@ export const getCredentialByPlatformAndUserPublic = async (req: Request, res: Re
     
     // Mettre à jour lastUsedAt
     await db
-      .update(aiCredentials)
+      .update(ai_credentials)
       .set({ lastUsedAt: new Date() })
-      .where(eq(aiCredentials.id, result[0].id));
+      .where(eq(ai_credentials.id, result[0].id));
     
     // Log pour debugging
     console.log(`✅ Credential récupéré pour ${platform}/${userIdentifier} (ID: ${result[0].id})`);

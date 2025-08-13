@@ -40,6 +40,17 @@ export const useGetWorkflowStatus = (projectUniqueId: string, options = {}) =>
     path: `/workflow/status/${projectUniqueId}`,
     options: {
       enabled: !!projectUniqueId,
+      retry: (failureCount, error: any) => {
+        // Ne pas retry si c'est une 404 (workflow pas encore initié)
+        if (error?.response?.status === 404) {
+          return false;
+        }
+        // Retry maximum 2 fois pour les autres erreurs
+        return failureCount < 2;
+      },
+      // Considérer les 404 comme des succès (workflow pas initié)
+      retryOnMount: false,
+      refetchOnWindowFocus: false,
       ...options,
     },
   });

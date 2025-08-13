@@ -1,17 +1,28 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import { useAuthStore } from '@/stores/auth';
 
+// Déclaration TypeScript pour la variable globale
+declare global {
+  interface Window {
+    __API_CONFIG_LOGGED?: boolean;
+  }
+}
+
 // Détection automatique de l'environnement de production
 const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
 
 export const BASE_URL = isProduction ? "/api" : "http://localhost:3001/api";
 
-console.log('🔧 API Configuration:', {
-  'import.meta.env.PROD': import.meta.env.PROD,
-  'window.location.hostname': window.location.hostname,
-  isProduction,
-  BASE_URL
-});
+// Log de configuration uniquement au premier chargement
+if (!window.__API_CONFIG_LOGGED) {
+  console.log('🔧 API Configuration:', {
+    'import.meta.env.PROD': import.meta.env.PROD,
+    'window.location.hostname': window.location.hostname,
+    isProduction,
+    BASE_URL
+  });
+  window.__API_CONFIG_LOGGED = true;
+}
 
 const axiosInstance = axios.create({ baseURL: BASE_URL });
 

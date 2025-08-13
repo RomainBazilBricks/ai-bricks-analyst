@@ -39,7 +39,15 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
     isError: isWorkflowError,
     error: workflowError,
     refetch: refetchWorkflow
-  } = useGetWorkflowStatus(projectUniqueId, { enabled: !!projectUniqueId });
+  } = useGetWorkflowStatus(projectUniqueId, { 
+    enabled: !!projectUniqueId,
+    // Traiter les 404 comme des cas normaux (pas d'erreur)
+    onError: (error: any) => {
+      if (error?.response?.status !== 404) {
+        console.error('Erreur lors du chargement du workflow:', error);
+      }
+    }
+  });
 
   // Hook pour récupérer les étapes d'analyse par défaut
   const {
@@ -74,6 +82,12 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
     if (!projectUniqueId || !step) return;
     
     const stepId = step.step?.id || step.id;
+    
+    // Double vérification : si déjà en cours d'envoi, ne pas continuer
+    if (sendingPrompts.has(stepId)) {
+      console.log('⚠️ Tentative d\'envoi multiple détectée, requête ignorée');
+      return;
+    }
     
     // Marquer comme en cours d'envoi
     setSendingPrompts(prev => new Set(prev).add(stepId));
@@ -219,7 +233,7 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {(isWorkflowLoading || isStepsLoading) ? (
+          {((isWorkflowLoading && !(isWorkflowError && (workflowError as any)?.response?.status === 404)) || isStepsLoading) ? (
             <div className="space-y-4">
               <Skeleton className="h-16 w-full" />
               <Skeleton className="h-16 w-full" />
@@ -267,24 +281,35 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* En-tête avec bouton d'initiation si workflow pas encore créé */}
+              {/* Informations sur le workflow */}
               {!hasWorkflow && (
-                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-lg font-medium text-blue-900 mb-1">Workflow prêt à être lancé</h3>
-                      <p className="text-sm text-blue-700">
-                        Les étapes d'analyse sont configurées et prêtes. Lancez le workflow pour commencer l'évaluation automatique.
+                      <h3 className="text-lg font-medium text-amber-900 mb-1">Workflow en attente d'initialisation</h3>
+                      <p className="text-sm text-amber-700">
+                        Ce projet a été créé avant la mise en place du workflow automatique. 
+                        Cliquez sur "Initialiser" pour créer les étapes d'analyse.
                       </p>
                     </div>
-                    <Button 
-                      onClick={handleInitiateWorkflow}
-                      disabled={isInitiating}
-                      className="flex items-center gap-2"
-                    >
-                      <Play className="h-4 w-4" />
-                      {isInitiating ? 'Initialisation...' : 'Lancer le workflow'}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={handleInitiateWorkflow}
+                        disabled={isInitiating}
+                        className="flex items-center gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        {isInitiating ? 'Initialisation...' : 'Initialiser le workflow'}
+                      </Button>
+                      <Button 
+                        onClick={() => refetchWorkflow()}
+                        variant="outline"
+                        className="flex items-center gap-2"
+                      >
+                        <Brain className="h-4 w-4" />
+                        Actualiser
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -328,8 +353,8 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
                           </h4>
                           {getStatusIcon(step.status)}
                           {!hasWorkflow && (
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full ml-2">
-                              En attente d'initiation
+                            <span className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full ml-2">
+                              Prêt à analyser
                             </span>
                           )}
                           

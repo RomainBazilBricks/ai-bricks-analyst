@@ -1,139 +1,6 @@
-import { pgTable, serial, text, varchar, timestamp, uuid, integer, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, varchar, timestamp, uuid, integer, boolean, jsonb, decimal, pgEnum, unique } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 256 }).notNull(),
-  email: text('email').notNull(),
-  password: text('password').notNull(),
-});
-
-/**
- * Projects Table - Represents an investment project or dossier
- */
-export const projects = pgTable('projects', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectUniqueId: varchar('project_unique_id', { length: 256 }).notNull().unique(),
-  projectName: varchar('project_name', { length: 512 }).notNull(),
-  conversationUrl: text('conversation_url'), // URL de la conversation avec l'outil externe
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
-
-/**
- * Documents Table - Files attached to projects, stored in AWS S3
- */
-export const documents = pgTable('documents', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  fileName: varchar('file_name', { length: 512 }).notNull(),
-  url: text('url').notNull(), // AWS S3 URL
-  hash: varchar('hash', { length: 256 }).notNull(), // SHA-256 hash for duplicate detection
-  mimeType: varchar('mime_type', { length: 128 }).notNull(),
-  size: integer('size').notNull(), // File size in bytes
-  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
-});
-
-/**
- * Syntheses Table - AI-generated analysis attached to projects
- */
-export const syntheses = pgTable('syntheses', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  content: text('content').notNull(), // Full synthesis text or JSON
-  manusConversationUrl: text('manus_conversation_url'), // URL to ManusAI conversation
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
-/**
- * Analysis Workflow Steps - Définit les étapes d'analyse disponibles
- */
-export const analysisSteps = pgTable('analysis_steps', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 256 }).notNull().unique(),
-  description: text('description').notNull(),
-  prompt: text('prompt').notNull(), // Prompt stocké pour cette étape
-  order: integer('order').notNull(), // Ordre d'exécution (1, 2, 3, 4, 5)
-  isActive: integer('is_active').notNull().default(1), // 1 = actif, 0 = inactif
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-});
-
-/**
- * Project Analysis Workflow - Suivi des étapes d'analyse pour chaque projet
- */
-export const projectAnalysisWorkflow = pgTable('project_analysis_workflow', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  stepId: integer('step_id').references(() => analysisSteps.id, { onDelete: 'cascade' }).notNull(),
-  status: varchar('status', { length: 50 }).notNull().default('pending'), // pending, in_progress, completed, failed
-  content: text('content'), // Contenu dynamique de la réponse de cette étape
-  manusConversationUrl: text('manus_conversation_url'), // URL de conversation pour cette étape spécifique
-  startedAt: timestamp('started_at'),
-  completedAt: timestamp('completed_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
-
-/**
- * AI Credentials Table - Stocke les credentials pour différentes plateformes IA
- */
-export const aiCredentials = pgTable('ai_credentials', {
-  id: serial('id').primaryKey(),
-  
-  // Métadonnées
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  isActive: boolean('is_active').default(true).notNull(),
-  
-  // Identification
-  platform: varchar('platform', { length: 50 }).notNull(), // 'chatgpt', 'claude', 'manus', 'perplexity', etc.
-  userIdentifier: varchar('user_identifier', { length: 255 }), // email, user_id, etc.
-  credentialName: varchar('credential_name', { length: 255 }).default('default').notNull(),
-  
-  // Données de session (structure flexible)
-  sessionData: jsonb('session_data').notNull(), // Tous les tokens, cookies, etc.
-  
-  // Métadonnées utiles
-  expiresAt: timestamp('expires_at'),
-  lastUsedAt: timestamp('last_used_at').defaultNow(),
-  userAgent: text('user_agent'),
-  notes: text('notes'),
-});
-
-// Zod Schemas for API Validation
-
-// Schema for POST /projects (creating project with file URLs)
-export const CreateProjectSchema = z.object({
-  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  projectName: z.string().min(1, 'ProjectName is required'),
-  fileUrls: z.array(z.string().url('Must be valid URLs')).min(1, 'At least one file URL is required'),
-});
-
-// Schema for GET /projects/{projectUniqueId}/documents
-export const GetDocumentsSchema = z.object({
-  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-});
-
-// Schema for POST /projects/synthesis
-export const PostSynthesisSchema = z.object({
-  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  synthesis: z.string().min(1, 'Synthesis content is required'),
-  manusConversationUrl: z.string().url('Must be a valid URL').optional(),
-});
-
-// Schema for POST /projects/conversation-url
-export const UpdateConversationUrlSchema = z.object({
-  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  conversationUrl: z.string().url('Must be a valid URL'),
-});
-
-// Types for responses
-export type ProjectVisualizationType = {
-  projectUniqueId: string;
-  documents: { fileName: string; url: string }[];
-  manusConversationUrls: string[];
-  syntheses: { content: string; createdAt: Date }[];
-};
 
 // Enums
 export enum FileStatus {
@@ -142,9 +9,320 @@ export enum FileStatus {
   ERROR = 'ERROR',
 }
 
-// Nouveaux schémas Zod pour le workflow d'analyse
+export enum WorkflowStatus {
+  PENDING = 'pending',
+  IN_PROGRESS = 'in_progress',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
+}
 
-// Schema pour créer une étape d'analyse
+export enum AiPlatform {
+  CHATGPT = 'chatgpt',
+  CLAUDE = 'claude',
+  MANUS = 'manus',
+  PERPLEXITY = 'perplexity',
+  GEMINI = 'gemini',
+  MISTRAL = 'mistral',
+}
+
+export enum RiskLevel {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+}
+
+export enum DocumentStatus {
+  PENDING = 'pending',
+  RESOLVED = 'resolved',
+  IRRELEVANT = 'irrelevant',
+}
+
+export enum SessionStatus {
+  OPEN = 'open',
+  CLOSED = 'closed',
+}
+
+// Définition des enums PostgreSQL
+export const sessionStatusEnum = pgEnum('session_status', ['open', 'closed']);
+export const fileStatusEnum = pgEnum('file_status', ['UPLOADED', 'PROCESSED', 'ERROR']);
+export const documentStatusEnum = pgEnum('document_status', ['pending', 'resolved', 'irrelevant']);
+export const riskLevelEnum = pgEnum('risk_level', ['low', 'medium', 'high']);
+
+// Users Table - Represents administrators
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 256 }).notNull(),
+  email: text('email').notNull(),
+  password: text('password').notNull(),
+});
+
+// Projects Table - Represents an investment project or dossier
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectUniqueId: varchar('project_unique_id', { length: 256 }).notNull().unique(),
+  projectName: varchar('project_name', { length: 512 }).notNull(),
+  description: text('description').notNull(), // Project overview
+  budgetTotal: decimal('budget_total', { precision: 15, scale: 2 }).notNull(), // Total budget
+  estimatedRoi: decimal('estimated_roi', { precision: 5, scale: 2 }).notNull(), // ROI percentage
+  startDate: timestamp('start_date').notNull(), // Start date
+  fundingExpectedDate: timestamp('funding_expected_date').notNull(), // Date funding is needed
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Sessions Table - Represents a working session linked to a project, grouping documents and conversations
+export const sessions = pgTable('sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 256 }).default('').notNull(), // Optional name for the session
+  description: text('description').default('').notNull(), // Optional description for context
+  status: sessionStatusEnum('status').notNull().default('open'), // Session status
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Conversations With AI Table - Stores AI conversation URLs and models linked to a session
+export const conversations_with_ai = pgTable('conversations_with_ai', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }).notNull(),
+  url: text('url').notNull(), // Conversation URL
+  model: varchar('model', { length: 50 }).notNull(), // e.g., 'manus', 'chatgpt'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Project Owners Table - Represents the project owner
+export const project_owners = pgTable('project_owners', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 256 }).notNull(),
+  experienceYears: integer('experience_years').notNull(),
+  reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Companies Table - Represents the company carrying the project
+export const companies = pgTable('companies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 512 }).notNull(),
+  siret: varchar('siret', { length: 14 }).notNull().unique(),
+  reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Documents Table - Files attached to sessions, stored in AWS S3
+export const documents = pgTable('documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }).notNull(),
+  fileName: varchar('file_name', { length: 512 }).notNull(),
+  url: text('url').notNull(), // AWS S3 URL
+  hash: varchar('hash', { length: 256 }).notNull(), // SHA-256 hash for duplicate detection
+  mimeType: varchar('mime_type', { length: 128 }).notNull(),
+  size: integer('size').notNull(), // File size in bytes
+  status: fileStatusEnum('status').notNull().default('UPLOADED'),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+});
+
+// Missing Documents Table - Documents required but not yet provided, linked to project
+export const missing_documents = pgTable('missing_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 512 }).notNull(),
+  whyMissing: text('why_missing').default('').notNull(), // Reason why document is missing, optional
+  status: documentStatusEnum('status').notNull().default('pending'),
+  whyStatus: text('why_status').default('').notNull(), // Justification for status, optional
+  updatedBy: integer('updated_by').references(() => users.id), // User who updated the status
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Vigilance Points Table - Stores project alerts
+export const vigilance_points = pgTable('vigilance_points', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  title: varchar('title', { length: 256 }).notNull(),
+  whyVigilance: text('why_vigilance').default('').notNull(), // Reason for vigilance, optional
+  riskLevel: riskLevelEnum('risk_level').notNull(),
+  status: documentStatusEnum('status').notNull().default('pending'),
+  whyStatus: text('why_status').default('').notNull(), // Justification for status, optional
+  updatedBy: integer('updated_by').references(() => users.id), // User who updated the status
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Conversations Table - Stores conversation history linked to sessions
+export const conversations = pgTable('conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }).notNull(),
+  sessionDate: timestamp('session_date').notNull(),
+  sender: varchar('sender', { length: 256 }).notNull(),
+  message: text('message').notNull(),
+  attachments: jsonb('attachments').default([]), // Array of { fileName: string, url: string }
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Analysis Workflow Steps - Defines available analysis steps
+export const analysis_steps = pgTable('analysis_steps', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 256 }).notNull().unique(),
+  description: text('description').notNull(),
+  prompt: text('prompt').notNull(),
+  order: integer('order').notNull(),
+  isActive: integer('is_active').notNull().default(1),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Project Analysis Workflow - Tracks analysis steps for each project
+export const project_analysis_workflow = pgTable('project_analysis_workflow', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  stepId: integer('step_id').references(() => analysis_steps.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar('status', { length: 50 }).notNull().default('pending'),
+  content: text('content'),
+  manusConversationUrl: text('manus_conversation_url'),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// AI Credentials Table - Stores credentials for AI platforms
+export const ai_credentials = pgTable('ai_credentials', {
+  id: serial('id').primaryKey(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  platform: varchar('platform', { length: 50 }).notNull(),
+  userIdentifier: varchar('user_identifier', { length: 255 }),
+  credentialName: varchar('credential_name', { length: 255 }).default('default').notNull(),
+  sessionData: jsonb('session_data').notNull(),
+  expiresAt: timestamp('expires_at'),
+  lastUsedAt: timestamp('last_used_at').defaultNow(),
+  userAgent: text('user_agent'),
+  notes: text('notes'),
+});
+
+// API Configuration Table - Stores external API configurations
+export const api_configurations = pgTable('api_configurations', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 256 }).notNull(),
+  url: text('url').notNull(),
+  description: text('description'),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Zod Schemas for API Validation
+
+// Schema for POST /projects (creating project with file URLs)
+export const CreateProjectSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  projectName: z.string().min(1, 'ProjectName is required'),
+  description: z.string().min(1, 'Description is required'),
+  budgetTotal: z.number().positive('Budget must be positive'),
+  estimatedRoi: z.number().positive('ROI must be positive'),
+  startDate: z.string().datetime('Valid start date required'),
+  fundingExpectedDate: z.string().datetime('Valid funding expected date required'),
+  fileUrls: z.array(z.string().url('Must be valid URLs')).min(1, 'At least one file URL is required'),
+});
+
+// Schema for POST /sessions
+export const CreateSessionSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  name: z.string().optional(), // Optional name for the session
+  description: z.string().optional(), // Optional description
+  status: z.enum(['open', 'closed']).default('open'), // Session status
+});
+
+// Schema for POST /conversations-with-ai
+export const CreateConversationWithAiSchema = z.object({
+  sessionId: z.string().uuid('SessionId must be a valid UUID'),
+  url: z.string().url('Must be a valid URL'),
+  model: z.string().min(1, 'Model is required'), // e.g., 'manus', 'chatgpt'
+});
+
+// Schema for POST /project-owners
+export const CreateProjectOwnerSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  name: z.string().min(1, 'Name is required'),
+  experienceYears: z.number().int().nonnegative('Experience years must be non-negative'),
+  reputationDescription: z.string().optional(), // Optional for IA flexibility
+});
+
+// Schema for POST /companies
+export const CreateCompanySchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  name: z.string().min(1, 'Name is required'),
+  siret: z.string().length(14, 'SIRET must be 14 characters'),
+  reputationDescription: z.string().optional(), // Optional for IA flexibility
+});
+
+// Schema for POST /documents
+export const CreateDocumentSchema = z.object({
+  sessionId: z.string().uuid('SessionId must be a valid UUID'),
+  fileName: z.string().min(1, 'FileName is required'),
+  url: z.string().url('Must be a valid URL'),
+  hash: z.string().min(1, 'Hash is required'),
+  mimeType: z.string().min(1, 'MimeType is required'),
+  size: z.number().int().positive('Size must be positive'),
+  status: z.enum(['UPLOADED', 'PROCESSED', 'ERROR']).default('UPLOADED'),
+});
+
+// Schema for POST /missing-documents
+export const CreateMissingDocumentSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  name: z.string().min(1, 'Name is required'),
+  whyMissing: z.string().optional(), // Optional for IA flexibility
+  status: z.enum(['pending', 'resolved', 'irrelevant']).default('pending'),
+  whyStatus: z.string().optional(), // Optional for IA flexibility
+  updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID').optional(), // Optional for creation
+});
+
+// Schema for PATCH /missing-documents/{id}
+export const UpdateMissingDocumentSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  missingDocumentId: z.string().uuid('MissingDocumentId must be a valid UUID'),
+  status: z.enum(['pending', 'resolved', 'irrelevant']).optional(),
+  whyStatus: z.string().optional(),
+  updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID'), // Required for updates
+});
+
+// Schema for POST /vigilance-points
+export const CreateVigilancePointSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  title: z.string().min(1, 'Title is required'),
+  whyVigilance: z.string().optional(), // Optional for IA flexibility
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  status: z.enum(['pending', 'resolved', 'irrelevant']).default('pending'),
+  whyStatus: z.string().optional(), // Optional for IA flexibility
+  updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID').optional(), // Optional for creation
+});
+
+// Schema for PATCH /vigilance-points/{id}
+export const UpdateVigilancePointSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  vigilancePointId: z.string().uuid('VigilancePointId must be a valid UUID'),
+  status: z.enum(['pending', 'resolved', 'irrelevant']).optional(),
+  whyStatus: z.string().optional(),
+  updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID'), // Required for updates
+});
+
+// Schema for POST /conversations
+export const CreateConversationSchema = z.object({
+  sessionId: z.string().uuid('SessionId must be a valid UUID'),
+  sessionDate: z.string().datetime('Valid session date required'),
+  sender: z.string().min(1, 'Sender is required'),
+  message: z.string().min(1, 'Message is required'),
+  attachments: z.array(z.object({ fileName: z.string(), url: z.string().url() })).default([]),
+});
+
+// Schema for GET /projects/{projectUniqueId}/details
+export const GetProjectDetailsSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+});
+
+// Schema for creating analysis step
 export const CreateAnalysisStepSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string().min(1, 'Description is required'),
@@ -153,7 +331,7 @@ export const CreateAnalysisStepSchema = z.object({
   isActive: z.number().int().min(0).max(1).default(1),
 });
 
-// Schema pour mettre à jour le statut d'une étape de workflow
+// Schema for updating workflow step
 export const UpdateWorkflowStepSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   stepId: z.number().int().positive('StepId must be a positive integer'),
@@ -162,38 +340,28 @@ export const UpdateWorkflowStepSchema = z.object({
   manusConversationUrl: z.string().url('Must be a valid URL').optional(),
 });
 
-// Schema pour initier le workflow d'analyse d'un projet
+// Schema for initiating workflow
 export const InitiateWorkflowSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
 });
 
-// Schema pour récupérer le statut du workflow
+// Schema for getting workflow status
 export const GetWorkflowStatusSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
 });
 
-// Enums pour le workflow
-export enum WorkflowStatus {
-  PENDING = 'pending',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-}
-
-// Nouveaux schémas Zod pour les AI Credentials
-
-// Schema pour créer un credential
+// Schema for creating AI credential
 export const CreateAiCredentialSchema = z.object({
   platform: z.string().min(1, 'Platform is required'),
   userIdentifier: z.string().optional(),
   credentialName: z.string().default('default'),
-  sessionData: z.record(z.string(), z.any()), // Structure flexible pour les données de session
+  sessionData: z.record(z.string(), z.any()),
   expiresAt: z.string().datetime().optional(),
   userAgent: z.string().optional(),
   notes: z.string().optional(),
 });
 
-// Schema pour mettre à jour un credential
+// Schema for updating AI credential
 export const UpdateAiCredentialSchema = z.object({
   platform: z.string().optional(),
   userIdentifier: z.string().optional(),
@@ -205,7 +373,7 @@ export const UpdateAiCredentialSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-// Schema pour les query params de filtrage
+// Schema for querying AI credentials
 export const GetAiCredentialsQuerySchema = z.object({
   platform: z.string().optional(),
   userIdentifier: z.string().optional(),
@@ -222,12 +390,139 @@ export const GetAiCredentialsQuerySchema = z.object({
   direction: z.enum(['next', 'prev']).default('next').optional(),
 });
 
-// Enums pour les plateformes supportées
-export enum AiPlatform {
-  CHATGPT = 'chatgpt',
-  CLAUDE = 'claude',
-  MANUS = 'manus',
-  PERPLEXITY = 'perplexity',
-  GEMINI = 'gemini',
-  MISTRAL = 'mistral',
-}
+// Schema for creating API configuration
+export const CreateApiConfigSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  url: z.string().url('Must be a valid URL'),
+  description: z.string().optional(),
+  isActive: z.boolean().default(true),
+});
+
+// Schema for updating API configuration
+export const UpdateApiConfigSchema = z.object({
+  name: z.string().min(1).optional(),
+  url: z.string().url('Must be a valid URL').optional(),
+  description: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+// Schema for querying API configurations
+export const GetApiConfigsQuerySchema = z.object({
+  name: z.string().optional(),
+  isActive: z.string().optional().transform((val) => {
+    if (val === undefined || val === '') return undefined;
+    return val === 'true';
+  }),
+  cursor: z.string().optional(),
+  limit: z.string().optional().transform((val) => {
+    if (val === undefined || val === '') return 10;
+    const num = parseInt(val, 10);
+    return isNaN(num) ? 10 : Math.min(Math.max(num, 1), 100);
+  }),
+  direction: z.enum(['next', 'prev']).default('next').optional(),
+});
+
+// Schemas for AI workflow analysis payloads
+
+// Schema for macro analysis payload (Step 1)
+export const AnalysisMacroPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  macroAnalysis: z.object({
+    overallRisk: z.enum(['low', 'medium', 'high']),
+    marketPotential: z.enum(['low', 'medium', 'high']),
+    technicalFeasibility: z.enum(['low', 'medium', 'high']),
+    financialViability: z.enum(['low', 'medium', 'high']),
+    competitiveAdvantage: z.enum(['low', 'medium', 'high']),
+    summary: z.string().min(1, 'Summary is required'),
+    keyStrengths: z.array(z.string().min(1)).min(1, 'At least one strength is required'),
+    keyWeaknesses: z.array(z.string().min(1)).min(1, 'At least one weakness is required'),
+    recommendedActions: z.array(z.string().min(1)).min(1, 'At least one action is required'),
+  }),
+});
+
+// Schema for detailed analysis payload (Step 2)
+export const AnalysisDescriptionPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  detailedAnalysis: z.object({
+    businessModel: z.object({
+      description: z.string().min(1, 'Business model description is required'),
+      revenueStreams: z.array(z.string().min(1)),
+      keyPartners: z.array(z.string().min(1)),
+      valueProposition: z.string().min(1, 'Value proposition is required'),
+    }),
+    marketAnalysis: z.object({
+      targetMarket: z.string().min(1, 'Target market is required'),
+      marketSize: z.string().min(1, 'Market size is required'),
+      competitorAnalysis: z.string().min(1, 'Competitor analysis is required'),
+      marketTrends: z.array(z.string().min(1)),
+    }),
+    technicalAnalysis: z.object({
+      technologyStack: z.array(z.string().min(1)),
+      technicalRisks: z.array(z.string().min(1)),
+      developmentTimeline: z.string().min(1, 'Development timeline is required'),
+      scalabilityAssessment: z.string().min(1, 'Scalability assessment is required'),
+    }),
+    financialProjections: z.object({
+      revenueProjection: z.string().min(1, 'Revenue projection is required'),
+      costStructure: z.string().min(1, 'Cost structure is required'),
+      breakEvenAnalysis: z.string().min(1, 'Break-even analysis is required'),
+      fundingRequirements: z.string().min(1, 'Funding requirements is required'),
+    }),
+    teamAssessment: z.object({
+      keyPersonnel: z.array(z.string().min(1)),
+      skillsGaps: z.array(z.string().min(1)),
+      organizationalStructure: z.string().min(1, 'Organizational structure is required'),
+    }),
+  }),
+});
+
+// Schema for missing documents payload (Step 3)
+export const MissingDocumentsPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  missingDocuments: z.array(z.object({
+    name: z.string().min(1, 'Document name is required'),
+    whyMissing: z.string().min(1, 'Reason for missing document is required'),
+    priority: z.enum(['low', 'medium', 'high']),
+    category: z.enum(['legal', 'financial', 'technical', 'business', 'regulatory']),
+    impactOnProject: z.string().min(1, 'Impact on project is required'),
+    suggestedSources: z.array(z.string().min(1)),
+  })).min(1, 'At least one missing document is required'),
+});
+
+// Schema for vigilance points payload (Step 4)
+export const VigilancePointsPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  vigilancePoints: z.array(z.object({
+    title: z.string().min(1, 'Vigilance point title is required'),
+    whyVigilance: z.string().min(1, 'Reason for vigilance is required'),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    category: z.enum(['financial', 'technical', 'legal', 'market', 'operational', 'regulatory']),
+    potentialImpact: z.string().min(1, 'Potential impact is required'),
+    mitigationStrategies: z.array(z.string().min(1)),
+    monitoringRecommendations: z.array(z.string().min(1)),
+  })).min(1, 'At least one vigilance point is required'),
+});
+
+// Types for responses
+export type ProjectVisualizationType = {
+  projectUniqueId: string;
+  projectName: string;
+  description: string;
+  budgetTotal: number;
+  estimatedRoi: number;
+  startDate: Date;
+  fundingExpectedDate: Date;
+  company: { name: string; siret: string; reputationDescription: string };
+  projectOwner: { name: string; experienceYears: number; reputationDescription: string };
+  sessions: {
+    id: string;
+    name: string;
+    description: string;
+    status: string; // 'open' or 'closed'
+    documents: { fileName: string; url: string; status: string }[];
+    conversations: { sessionDate: Date; sender: string; message: string; attachments: { fileName: string; url: string }[] }[];
+    conversationsWithAi: { url: string; model: string }[];
+  }[];
+  missingDocuments: { name: string; whyMissing: string; status: string; whyStatus: string; updatedBy?: number }[];
+  vigilancePoints: { title: string; whyVigilance: string; riskLevel: string; status: string; whyStatus: string; updatedBy?: number }[];
+};

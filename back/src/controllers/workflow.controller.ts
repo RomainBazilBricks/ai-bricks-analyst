@@ -2,12 +2,18 @@ import { Request, Response } from 'express';
 import { db } from '@/db/index';
 import { 
   projects, 
-  analysisSteps, 
-  projectAnalysisWorkflow,
+  analysis_steps, 
+  project_analysis_workflow,
+  missing_documents,
+  vigilance_points,
   CreateAnalysisStepSchema,
   UpdateWorkflowStepSchema,
   InitiateWorkflowSchema,
   GetWorkflowStatusSchema,
+  AnalysisMacroPayloadSchema,
+  AnalysisDescriptionPayloadSchema,
+  MissingDocumentsPayloadSchema,
+  VigilancePointsPayloadSchema,
   WorkflowStatus
 } from '@/db/schema';
 import { eq, and, asc } from 'drizzle-orm';
@@ -28,7 +34,7 @@ import type {
 export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
   try {
     // Vérifier si les étapes existent déjà
-    const existingSteps = await db.select().from(analysisSteps).limit(1);
+    const existingSteps = await db.select().from(analysis_steps).limit(1);
     
     if (existingSteps.length === 0) {
       // Créer les 5 étapes par défaut
@@ -36,28 +42,28 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
         {
           name: 'Analyse globale',
           description: 'Une analyse détaillée et approfondie du projet',
-          prompt: 'Réalisez une analyse détaillée et structurée du projet d\'investissement. Incluez : 1) Analyse financière (rentabilité, cash-flow, ROI), 2) Analyse du marché local, 3) Évaluation des risques, 4) Points forts et faiblesses, 5) Recommandations stratégiques. Soyez précis et utilisez les données des documents fournis.',
+          prompt: 'Réalisez une analyse détaillée et structurée du projet d\'investissement. Incluez : 1) Analyse financière (rentabilité, cash-flow, ROI), 2) Analyse du marché local, 3) Évaluation des risques, 4) Points forts et faiblesses, 5) Recommandations stratégiques. Soyez précis et utilisez les données des documents fournis.\n\nIMPORTANT: Retournez votre analyse sous forme JSON structuré via POST sur l\'endpoint /api/workflow/analysis-macro/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "macroAnalysis": {\n    "overallRisk": "low|medium|high",\n    "marketPotential": "low|medium|high",\n    "technicalFeasibility": "low|medium|high",\n    "financialViability": "low|medium|high",\n    "competitiveAdvantage": "low|medium|high",\n    "summary": "Résumé de votre analyse globale",\n    "keyStrengths": ["Point fort 1", "Point fort 2", ...],\n    "keyWeaknesses": ["Point faible 1", "Point faible 2", ...],\n    "recommendedActions": ["Action recommandée 1", "Action recommandée 2", ...]\n  }\n}',
           order: 1,
           isActive: 1
         },
         {
           name: 'Vue d\'ensemble du projet',
           description: 'Une description générale de quelques lignes sur le projet',
-          prompt: 'Analysez les documents fournis et rédigez une vue d\'ensemble concise du projet d\'investissement immobilier en 3-5 lignes maximum. Focalisez-vous sur les éléments clés : type de bien, localisation, objectif d\'investissement et rentabilité attendue.',
+          prompt: 'Analysez les documents fournis et rédigez une vue d\'ensemble concise du projet d\'investissement immobilier en 3-5 lignes maximum. Focalisez-vous sur les éléments clés : type de bien, localisation, objectif d\'investissement et rentabilité attendue.\n\nIMPORTANT: Développez maintenant cette analyse en sections détaillées via POST sur l\'endpoint /api/workflow/analysis-description/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "detailedAnalysis": {\n    "businessModel": {\n      "description": "Description détaillée du modèle économique",\n      "revenueStreams": ["Source de revenus 1", "Source de revenus 2"],\n      "keyPartners": ["Partenaire clé 1", "Partenaire clé 2"],\n      "valueProposition": "Proposition de valeur principale"\n    },\n    "marketAnalysis": {\n      "targetMarket": "Description du marché cible",\n      "marketSize": "Taille et caractéristiques du marché",\n      "competitorAnalysis": "Analyse concurrentielle",\n      "marketTrends": ["Tendance 1", "Tendance 2"]\n    },\n    "technicalAnalysis": {\n      "technologyStack": ["Technologie 1", "Technologie 2"],\n      "technicalRisks": ["Risque technique 1", "Risque technique 2"],\n      "developmentTimeline": "Planning de développement",\n      "scalabilityAssessment": "Évaluation de la scalabilité"\n    },\n    "financialProjections": {\n      "revenueProjection": "Projections de revenus détaillées",\n      "costStructure": "Structure des coûts",\n      "breakEvenAnalysis": "Analyse de seuil de rentabilité",\n      "fundingRequirements": "Besoins de financement"\n    },\n    "teamAssessment": {\n      "keyPersonnel": ["Personnel clé 1", "Personnel clé 2"],\n      "skillsGaps": ["Lacune 1", "Lacune 2"],\n      "organizationalStructure": "Structure organisationnelle"\n    }\n  }\n}',
           order: 2,
           isActive: 1
         },
         {
           name: 'Récupération des documents manquants',
           description: 'Liste des documents attendus en complément pour approfondir l\'analyse',
-          prompt: 'Identifiez et listez tous les documents manquants qui seraient nécessaires pour compléter l\'analyse de ce projet d\'investissement immobilier. Organisez-les par catégorie (financier, juridique, technique, marché) et précisez l\'importance de chaque document pour la prise de décision.',
+          prompt: 'Identifiez et listez tous les documents manquants qui seraient nécessaires pour compléter l\'analyse de ce projet d\'investissement immobilier. Organisez-les par catégorie (financier, juridique, technique, marché) et précisez l\'importance de chaque document pour la prise de décision.\n\nIMPORTANT: Structurez votre liste via POST sur l\'endpoint /api/workflow/missing-documents/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "missingDocuments": [\n    {\n      "name": "Nom précis du document",\n      "whyMissing": "Explication de pourquoi ce document est nécessaire",\n      "priority": "high|medium|low",\n      "category": "legal|financial|technical|business|regulatory",\n      "impactOnProject": "Impact de l\'absence de ce document sur le projet",\n      "suggestedSources": ["Source suggérée 1", "Source suggérée 2"]\n    }\n  ]\n}',
           order: 3,
           isActive: 1
         },
         {
           name: 'Points de vigilance',
           description: 'Identification des risques critiques qui pourraient compromettre le financement',
-          prompt: 'Analysez le projet d\'investissement immobilier et identifiez tous les points de vigilance critiques qui pourraient compromettre l\'obtention du financement. Organisez votre analyse en catégories : 1) Risques financiers (ratio d\'endettement, capacité de remboursement, apport personnel), 2) Risques juridiques (servitudes, litiges, conformité), 3) Risques techniques (état du bien, travaux nécessaires, diagnostics), 4) Risques de marché (localisation, évolution des prix, demande locative). Pour chaque point, évaluez le niveau de criticité et proposez des solutions ou documents complémentaires.',
+          prompt: 'Analysez le projet d\'investissement immobilier et identifiez tous les points de vigilance critiques qui pourraient compromettre l\'obtention du financement. Organisez votre analyse en catégories : 1) Risques financiers (ratio d\'endettement, capacité de remboursement, apport personnel), 2) Risques juridiques (servitudes, litiges, conformité), 3) Risques techniques (état du bien, travaux nécessaires, diagnostics), 4) Risques de marché (localisation, évolution des prix, demande locative). Pour chaque point, évaluez le niveau de criticité et proposez des solutions ou documents complémentaires.\n\nIMPORTANT: Structurez vos points de vigilance via POST sur l\'endpoint /api/workflow/vigilance-points/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "vigilancePoints": [\n    {\n      "title": "Titre concis du point de vigilance",\n      "whyVigilance": "Explication détaillée de la raison de vigilance",\n      "riskLevel": "high|medium|low",\n      "category": "financial|technical|legal|market|operational|regulatory",\n      "potentialImpact": "Impact potentiel sur le projet",\n      "mitigationStrategies": ["Stratégie d\'atténuation 1", "Stratégie d\'atténuation 2"],\n      "monitoringRecommendations": ["Recommandation de suivi 1", "Recommandation de suivi 2"]\n    }\n  ]\n}',
           order: 4,
           isActive: 1
         },
@@ -70,7 +76,7 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
         }
       ];
 
-      await db.insert(analysisSteps).values(defaultSteps);
+      await db.insert(analysis_steps).values(defaultSteps);
       console.log('✅ Étapes d\'analyse par défaut créées avec succès');
     }
   } catch (error) {
@@ -88,7 +94,7 @@ export const createAnalysisStep = async (req: Request, res: Response): Promise<a
     const stepData: CreateAnalysisStepInput = validatedData;
 
     const newStep = await db
-      .insert(analysisSteps)
+      .insert(analysis_steps)
       .values({
         name: stepData.name,
         description: stepData.description,
@@ -121,8 +127,8 @@ export const updateAnalysisStepDefinition = async (req: Request, res: Response):
     // Vérifier que l'étape existe
     const existingStep = await db
       .select()
-      .from(analysisSteps)
-      .where(eq(analysisSteps.id, stepId))
+      .from(analysis_steps)
+      .where(eq(analysis_steps.id, stepId))
       .limit(1);
 
     if (existingStep.length === 0) {
@@ -134,7 +140,7 @@ export const updateAnalysisStepDefinition = async (req: Request, res: Response):
 
     // Mettre à jour l'étape
     const updatedStep = await db
-      .update(analysisSteps)
+      .update(analysis_steps)
       .set({
         name: stepData.name,
         description: stepData.description,
@@ -142,7 +148,7 @@ export const updateAnalysisStepDefinition = async (req: Request, res: Response):
         order: stepData.order,
         isActive: stepData.isActive ?? 1,
       })
-      .where(eq(analysisSteps.id, stepId))
+      .where(eq(analysis_steps.id, stepId))
       .returning();
 
     res.json(updatedStep[0]);
@@ -162,9 +168,9 @@ export const getAllAnalysisSteps = async (req: Request, res: Response): Promise<
   try {
     const steps = await db
       .select()
-      .from(analysisSteps)
-      .where(eq(analysisSteps.isActive, 1))
-      .orderBy(asc(analysisSteps.order));
+      .from(analysis_steps)
+      .where(eq(analysis_steps.isActive, 1))
+      .orderBy(asc(analysis_steps.order));
 
     res.json(steps);
   } catch (error) {
@@ -176,14 +182,11 @@ export const getAllAnalysisSteps = async (req: Request, res: Response): Promise<
 };
 
 /**
- * Initie le workflow d'analyse pour un projet
- * @route POST /api/workflow/initiate
+ * Fonction utilitaire pour initier le workflow d'un projet
+ * Peut être utilisée par l'API et par d'autres fonctions internes
  */
-export const initiateWorkflow = async (req: Request, res: Response): Promise<any> => {
+export const initiateWorkflowForProject = async (projectUniqueId: string): Promise<{ success: boolean; stepsCreated?: number; error?: string }> => {
   try {
-    const validatedData = InitiateWorkflowSchema.parse(req.body);
-    const { projectUniqueId }: InitiateWorkflowInput = validatedData;
-
     // Vérifier que le projet existe
     const project = await db
       .select()
@@ -192,31 +195,25 @@ export const initiateWorkflow = async (req: Request, res: Response): Promise<any
       .limit(1);
 
     if (project.length === 0) {
-      return res.status(404).json({ 
-        error: 'Projet non trouvé',
-        code: 'PROJECT_NOT_FOUND'
-      });
+      return { success: false, error: 'Projet non trouvé' };
     }
 
     // Récupérer toutes les étapes actives
     const steps = await db
       .select()
-      .from(analysisSteps)
-      .where(eq(analysisSteps.isActive, 1))
-      .orderBy(asc(analysisSteps.order));
+      .from(analysis_steps)
+      .where(eq(analysis_steps.isActive, 1))
+      .orderBy(asc(analysis_steps.order));
 
     // Vérifier si le workflow existe déjà
     const existingWorkflow = await db
       .select()
-      .from(projectAnalysisWorkflow)
-      .where(eq(projectAnalysisWorkflow.projectId, project[0].id))
+      .from(project_analysis_workflow)
+      .where(eq(project_analysis_workflow.projectId, project[0].id))
       .limit(1);
 
     if (existingWorkflow.length > 0) {
-      return res.status(409).json({ 
-        error: 'Le workflow d\'analyse est déjà initié pour ce projet',
-        code: 'WORKFLOW_ALREADY_EXISTS'
-      });
+      return { success: false, error: 'Le workflow d\'analyse est déjà initié pour ce projet' };
     }
 
     // Créer les entrées de workflow pour chaque étape
@@ -229,14 +226,41 @@ export const initiateWorkflow = async (req: Request, res: Response): Promise<any
     }));
 
     const createdWorkflow = await db
-      .insert(projectAnalysisWorkflow)
+      .insert(project_analysis_workflow)
       .values(workflowEntries)
       .returning();
+
+    return { success: true, stepsCreated: createdWorkflow.length };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+/**
+ * Initie le workflow d'analyse pour un projet
+ * @route POST /api/workflow/initiate
+ */
+export const initiateWorkflow = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const validatedData = InitiateWorkflowSchema.parse(req.body);
+    const { projectUniqueId }: InitiateWorkflowInput = validatedData;
+
+    const result = await initiateWorkflowForProject(projectUniqueId);
+
+    if (!result.success) {
+      const statusCode = result.error?.includes('non trouvé') ? 404 : 
+                        result.error?.includes('déjà initié') ? 409 : 500;
+      return res.status(statusCode).json({ 
+        error: result.error,
+        code: statusCode === 404 ? 'PROJECT_NOT_FOUND' : 
+              statusCode === 409 ? 'WORKFLOW_ALREADY_EXISTS' : 'INITIATE_WORKFLOW_ERROR'
+      });
+    }
 
     res.status(201).json({
       message: 'Workflow d\'analyse initié avec succès',
       projectUniqueId,
-      stepsCreated: createdWorkflow.length
+      stepsCreated: result.stepsCreated
     });
   } catch (error) {
     res.status(500).json({ 
@@ -272,13 +296,13 @@ export const getWorkflowStatus = async (req: Request, res: Response): Promise<an
     // Récupérer le workflow avec les étapes
     const workflowSteps = await db
       .select({
-        workflow: projectAnalysisWorkflow,
-        step: analysisSteps
+        workflow: project_analysis_workflow,
+        step: analysis_steps
       })
-      .from(projectAnalysisWorkflow)
-      .leftJoin(analysisSteps, eq(projectAnalysisWorkflow.stepId, analysisSteps.id))
-      .where(eq(projectAnalysisWorkflow.projectId, project[0].id))
-      .orderBy(asc(analysisSteps.order));
+      .from(project_analysis_workflow)
+      .leftJoin(analysis_steps, eq(project_analysis_workflow.stepId, analysis_steps.id))
+      .where(eq(project_analysis_workflow.projectId, project[0].id))
+      .orderBy(asc(analysis_steps.order));
 
     if (workflowSteps.length === 0) {
       return res.status(404).json({ 
@@ -361,11 +385,11 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
     // Vérifier que l'étape de workflow existe
     const workflowStep = await db
       .select()
-      .from(projectAnalysisWorkflow)
+      .from(project_analysis_workflow)
       .where(
         and(
-          eq(projectAnalysisWorkflow.projectId, project[0].id),
-          eq(projectAnalysisWorkflow.stepId, stepData.stepId)
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, stepData.stepId)
         )
       )
       .limit(1);
@@ -401,9 +425,9 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
 
     // Mettre à jour l'étape
     const updatedStep = await db
-      .update(projectAnalysisWorkflow)
+      .update(project_analysis_workflow)
       .set(updateData)
-      .where(eq(projectAnalysisWorkflow.id, workflowStep[0].id))
+      .where(eq(project_analysis_workflow.id, workflowStep[0].id))
       .returning();
 
     res.json({
@@ -547,6 +571,317 @@ export const updateMessageStep = async (req: Request, res: Response): Promise<an
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'UPDATE_MESSAGE_STEP_ERROR'
+    });
+  }
+};
+
+// Nouveaux endpoints pour les analyses IA structurées
+
+/**
+ * Endpoint pour recevoir l'analyse macro de l'IA (Étape 1)
+ * @route POST /api/workflow/analysis-macro/:projectUniqueId
+ */
+export const receiveAnalysisMacro = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = AnalysisMacroPayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Trouver l'étape d'analyse macro (ordre 1)
+    const workflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, 1) // Étape 1 = analyse macro
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape de workflow non trouvée. Initialisez d\'abord le workflow.',
+        code: 'WORKFLOW_STEP_NOT_FOUND'
+      });
+    }
+
+    // Mettre à jour l'étape avec les données de l'analyse macro
+    const updatedStep = await db
+      .update(project_analysis_workflow)
+      .set({
+        status: 'completed',
+        content: JSON.stringify(validatedData.macroAnalysis),
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_workflow.id, workflowStep[0].id))
+      .returning();
+
+    res.status(200).json({
+      success: true,
+      message: 'Analyse macro reçue et enregistrée avec succès',
+      workflowStepId: updatedStep[0].id,
+      data: validatedData.macroAnalysis
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_ANALYSIS_MACRO_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour recevoir l'analyse détaillée de l'IA (Étape 2)
+ * @route POST /api/workflow/analysis-description/:projectUniqueId
+ */
+export const receiveAnalysisDescription = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = AnalysisDescriptionPayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    const workflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, 2) // Étape 2 = description détaillée
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape de workflow non trouvée',
+        code: 'WORKFLOW_STEP_NOT_FOUND'
+      });
+    }
+
+    const updatedStep = await db
+      .update(project_analysis_workflow)
+      .set({
+        status: 'completed',
+        content: JSON.stringify(validatedData.detailedAnalysis),
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_workflow.id, workflowStep[0].id))
+      .returning();
+
+    res.status(200).json({
+      success: true,
+      message: 'Analyse détaillée reçue et enregistrée avec succès',
+      workflowStepId: updatedStep[0].id,
+      data: validatedData.detailedAnalysis
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_ANALYSIS_DESCRIPTION_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour recevoir les documents manquants de l'IA (Étape 3)
+ * @route POST /api/workflow/missing-documents/:projectUniqueId
+ */
+export const receiveMissingDocuments = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = MissingDocumentsPayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Créer les documents manquants
+    const documentsToCreate = validatedData.missingDocuments.map(doc => ({
+      projectId: project[0].id,
+      name: doc.name,
+      whyMissing: doc.whyMissing,
+      status: 'pending' as const,
+      whyStatus: `Priorité: ${doc.priority}, Catégorie: ${doc.category}, Impact: ${doc.impactOnProject}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const createdDocuments = await db
+      .insert(missing_documents)
+      .values(documentsToCreate)
+      .returning();
+
+    // Mettre à jour l'étape du workflow
+    const workflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, 3) // Étape 3 = documents manquants
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length > 0) {
+      await db
+        .update(project_analysis_workflow)
+        .set({
+          status: 'completed',
+          content: JSON.stringify(validatedData.missingDocuments),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_workflow.id, workflowStep[0].id));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Documents manquants reçus et enregistrés avec succès',
+      workflowStepId: workflowStep.length > 0 ? workflowStep[0].id : null,
+      documentsCreated: createdDocuments.length,
+      data: createdDocuments.map(doc => ({
+        id: doc.id,
+        name: doc.name,
+        status: doc.status
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_MISSING_DOCUMENTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour recevoir les points de vigilance de l'IA (Étape 4)
+ * @route POST /api/workflow/vigilance-points/:projectUniqueId
+ */
+export const receiveVigilancePoints = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = VigilancePointsPayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Créer les points de vigilance
+    const pointsToCreate = validatedData.vigilancePoints.map(point => ({
+      projectId: project[0].id,
+      title: point.title,
+      whyVigilance: point.whyVigilance,
+      riskLevel: point.riskLevel,
+      status: 'pending' as const,
+      whyStatus: `Catégorie: ${point.category}, Impact: ${point.potentialImpact}`,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const createdPoints = await db
+      .insert(vigilance_points)
+      .values(pointsToCreate)
+      .returning();
+
+    // Mettre à jour l'étape du workflow
+    const workflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, 4) // Étape 4 = points de vigilance
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length > 0) {
+      await db
+        .update(project_analysis_workflow)
+        .set({
+          status: 'completed',
+          content: JSON.stringify(validatedData.vigilancePoints),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_workflow.id, workflowStep[0].id));
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Points de vigilance reçus et enregistrés avec succès',
+      workflowStepId: workflowStep.length > 0 ? workflowStep[0].id : null,
+      pointsCreated: createdPoints.length,
+      data: createdPoints.map(point => ({
+        id: point.id,
+        title: point.title,
+        riskLevel: point.riskLevel,
+        status: point.status
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_VIGILANCE_POINTS_ERROR'
     });
   }
 }; 

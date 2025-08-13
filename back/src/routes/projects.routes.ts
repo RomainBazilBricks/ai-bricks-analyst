@@ -2,20 +2,17 @@ import { Router } from 'express';
 import { 
   createProject, 
   getPaginatedProjects, 
-  getProjectDocuments, 
-  postSynthesis,
-  getProjectFiles,
   getProjectById,
-  updateProjectConversationUrl
+  getProjectDocuments
 } from '@/controllers/projects.controller';
 
 const router = Router();
 
 /**
  * @route POST /api/projects
- * @description Crée un nouveau projet et télécharge les fichiers depuis les URLs fournies
- * @body { projectUniqueId: string, fileUrls: string[] }
- * @returns {ProjectWithDocumentsResponse} Projet créé avec ses documents
+ * @description Crée un nouveau projet
+ * @body { projectUniqueId: string, projectName: string, description: string, budgetTotal: number, estimatedRoi: number, startDate: string, fundingExpectedDate: string, fileUrls: string[] }
+ * @returns {ProjectResponse} Projet créé
  */
 router.post('/', createProject);
 
@@ -28,42 +25,18 @@ router.post('/', createProject);
 router.get('/', getPaginatedProjects);
 
 /**
- * @route GET /api/projects/files
- * @description Récupère les URLs des fichiers d'un projet spécifique ou de tous les projets
- * @query projectUniqueId?: string - Identifiant unique du projet (optionnel)
- * @returns {AllProjectFilesResponse | SingleProjectFilesResponse} URLs des fichiers
- */
-router.get('/files', getProjectFiles);
-
-/**
- * @route POST /api/projects/synthesis
- * @description Reçoit une synthèse de ManusAI et l'associe au projet
- * @body { projectUniqueId: string, synthesis: string, manusConversationUrl?: string }
- * @returns {SynthesisResponse} Synthèse créée
- */
-router.post('/synthesis', postSynthesis);
-
-/**
- * @route POST /api/projects/conversation-url
- * @description Met à jour l'URL de conversation d'un projet
- * @body { projectUniqueId: string, conversationUrl: string }
- * @returns {ProjectResponse} Projet mis à jour
- */
-router.post('/conversation-url', updateProjectConversationUrl);
-
-/**
  * @route GET /api/projects/:projectUniqueId
- * @description Récupère un projet spécifique avec tous ses détails
+ * @description Récupère un projet spécifique par son ID
  * @param projectUniqueId - Identifiant unique du projet
- * @returns {ProjectWithDocumentsResponse} Projet avec documents et synthèses
+ * @returns {ProjectResponse} Projet trouvé
  */
 router.get('/:projectUniqueId', getProjectById);
 
 /**
  * @route GET /api/projects/:projectUniqueId/documents
- * @description Récupère les documents d'un projet avec URLs pré-signées pour ManusAI
+ * @description Récupère les documents d'un projet spécifique
  * @param projectUniqueId - Identifiant unique du projet
- * @returns {DocumentResponse[]} Liste des documents avec URLs pré-signées
+ * @returns {DocumentResponse[]} Liste des documents du projet
  */
 router.get('/:projectUniqueId/documents', getProjectDocuments);
 

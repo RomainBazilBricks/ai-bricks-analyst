@@ -3,7 +3,7 @@ import type { RouteObject } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/api/query-config";
 import { AuthLayout } from "@/layouts";
-import { Home, FolderOpen, Brain, FileText, LogIn, UserPlus, LogOut, User, Key } from "lucide-react";
+import { Home, FolderOpen, Brain, FileText, LogIn, UserPlus, LogOut, User, Key, Settings } from "lucide-react";
 import { AppRoutes } from "@/navigation/use-app-routes";
 import { useAuthStore } from "@/stores/auth";
 
@@ -29,6 +29,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
     { name: 'API ManusAI', href: AppRoutes.apiDocumentation, icon: Brain },
     { name: 'Prompts', href: AppRoutes.prompts, icon: FileText },
     { name: 'Credentials IA', href: AppRoutes.aiCredentials, icon: Key },
+    { name: 'Config API', href: AppRoutes.apiConfig, icon: Settings },
   ];
 
   // Navigation pour utilisateurs non connectés

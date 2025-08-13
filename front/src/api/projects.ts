@@ -54,10 +54,10 @@ export const useGetProjectDocuments = (projectUniqueId: string, options = {}) =>
   });
 
 /**
- * Hook pour récupérer un projet spécifique avec tous ses détails
+ * Hook pour récupérer un projet spécifique par son ID
  */
 export const useGetProjectById = (projectUniqueId: string, options = {}) =>
-  useFetcher<undefined, ProjectWithDocumentsResponse>({
+  useFetcher<undefined, ProjectResponse>({
     key: ["projects", projectUniqueId],
     path: `/projects/${projectUniqueId}`,
     options: {

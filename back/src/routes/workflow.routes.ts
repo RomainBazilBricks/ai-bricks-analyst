@@ -10,7 +10,11 @@ import {
   updateAnalysisStep,
   updateDocumentsStep,
   updateVigilanceStep,
-  updateMessageStep
+  updateMessageStep,
+  receiveAnalysisMacro,
+  receiveAnalysisDescription,
+  receiveMissingDocuments,
+  receiveVigilancePoints
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
 
@@ -33,9 +37,9 @@ router.post('/steps', authenticateJWT, createAnalysisStep);
  * Récupère toutes les étapes d'analyse actives
  * @route GET /api/workflow/steps
  * @returns {AnalysisStepResponse[]} Liste des étapes d'analyse
- * @access Private (authentification requise)
+ * @access Public (temporaire)
  */
-router.get('/steps', authenticateJWT, getAllAnalysisSteps);
+router.get('/steps', getAllAnalysisSteps);
 
 /**
  * Met à jour une étape d'analyse existante
@@ -64,9 +68,9 @@ router.post('/initiate', authenticateJWT, initiateWorkflow);
  * @route GET /api/workflow/status/:projectUniqueId
  * @param {string} projectUniqueId - ID unique du projet
  * @returns {ProjectWorkflowStatusResponse} Statut complet du workflow
- * @access Private (authentification requise)
+ * @access Public (temporaire)
  */
-router.get('/status/:projectUniqueId', authenticateJWT, getWorkflowStatus);
+router.get('/status/:projectUniqueId', getWorkflowStatus);
 
 /**
  * Met à jour le statut d'une étape de workflow (usage générique)
@@ -126,5 +130,46 @@ router.post('/step-4-vigilance', updateVigilanceStep);
  * @access Public (pour Manus)
  */
 router.post('/step-5-message', updateMessageStep);
+
+/**
+ * Nouveaux endpoints pour les analyses IA structurées
+ * Ces endpoints sont publics car ils sont appelés par l'IA externe
+ */
+
+/**
+ * Endpoint pour recevoir l'analyse macro de l'IA (Étape 1)
+ * @route POST /api/workflow/analysis-macro/:projectUniqueId
+ * @param {AnalysisMacroPayload} body - Données de l'analyse macro
+ * @returns {AnalysisMacroResponse} Confirmation et données sauvegardées
+ * @access Public (pour IA)
+ */
+router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
+
+/**
+ * Endpoint pour recevoir l'analyse détaillée de l'IA (Étape 2)
+ * @route POST /api/workflow/analysis-description/:projectUniqueId
+ * @param {AnalysisDescriptionPayload} body - Données de l'analyse détaillée
+ * @returns {AnalysisDescriptionResponse} Confirmation et données sauvegardées
+ * @access Public (pour IA)
+ */
+router.post('/analysis-description/:projectUniqueId', receiveAnalysisDescription);
+
+/**
+ * Endpoint pour recevoir les documents manquants de l'IA (Étape 3)
+ * @route POST /api/workflow/missing-documents/:projectUniqueId
+ * @param {MissingDocumentsPayload} body - Liste des documents manquants
+ * @returns {MissingDocumentsResponse} Confirmation et documents créés
+ * @access Public (pour IA)
+ */
+router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
+
+/**
+ * Endpoint pour recevoir les points de vigilance de l'IA (Étape 4)
+ * @route POST /api/workflow/vigilance-points/:projectUniqueId
+ * @param {VigilancePointsPayload} body - Liste des points de vigilance
+ * @returns {VigilancePointsResponse} Confirmation et points créés
+ * @access Public (pour IA)
+ */
+router.post('/vigilance-points/:projectUniqueId', receiveVigilancePoints);
 
 export default router; 

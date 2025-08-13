@@ -6,6 +6,7 @@ import { ProjectDetailPage } from "@/pages/project-detail";
 import { ApiDocumentationPage } from "@/pages/api-documentation";
 import { PromptsPage } from "@/pages/prompts";
 import { AiCredentialsPage } from "@/pages/ai-credentials";
+import { ApiConfigPage } from "@/pages/api-config";
 
 
 export enum AppRoutes {
@@ -15,6 +16,7 @@ export enum AppRoutes {
     apiDocumentation = '/api',
     prompts = '/prompts',
     aiCredentials = '/ai-credentials',
+    apiConfig = '/api-config',
     login = '/login',
     register = '/register',
 }
@@ -26,6 +28,7 @@ export enum ProtectedRoutes {
     apiDocumentation = AppRoutes.apiDocumentation,
     prompts = AppRoutes.prompts,
     aiCredentials = AppRoutes.aiCredentials,
+    apiConfig = AppRoutes.apiConfig,
 }
 
 export const useAppRoutes = () => {
@@ -38,6 +41,7 @@ export const useAppRoutes = () => {
             { path: AppRoutes.apiDocumentation, element: <ApiDocumentationPage /> },
             { path: AppRoutes.prompts, element: <PromptsPage /> },
             { path: AppRoutes.aiCredentials, element: <AiCredentialsPage /> },
+            { path: AppRoutes.apiConfig, element: <ApiConfigPage /> },
             { path: AppRoutes.login, element: <LoginPage /> },
             { path: AppRoutes.register, element: <RegisterPage /> },
         ],

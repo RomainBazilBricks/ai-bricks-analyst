@@ -3,7 +3,11 @@ export type Project = {
   id: string;
   projectUniqueId: string;
   projectName: string;
-  conversationUrl: string | null;
+  description: string;
+  budgetTotal: string;
+  estimatedRoi: string;
+  startDate: Date;
+  fundingExpectedDate: Date;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -31,6 +35,11 @@ export type Synthesis = {
 export type CreateProjectInput = {
   projectUniqueId: string;
   projectName: string;
+  description: string;
+  budgetTotal: number;
+  estimatedRoi: number;
+  startDate: string;
+  fundingExpectedDate: string;
   fileUrls: string[];
 };
 
@@ -41,13 +50,16 @@ export type PostSynthesisInput = {
 };
 
 // Response types
-export type ProjectResponse = Project;
+export type ProjectResponse = Project & {
+  budgetTotal: number;
+  estimatedRoi: number;
+};
 
 export type DocumentResponse = Document;
 
 export type SynthesisResponse = Synthesis;
 
-export type ProjectWithDocumentsResponse = Project & {
+export type ProjectWithDocumentsResponse = ProjectResponse & {
   documents: DocumentResponse[];
   syntheses: SynthesisResponse[];
 };
@@ -178,4 +190,20 @@ export type OverviewStepResponse = ProjectAnalysisWorkflowResponse;
 export type AnalysisStepResponse = ProjectAnalysisWorkflowResponse;
 export type DocumentsStepResponse = ProjectAnalysisWorkflowResponse;
 export type VigilanceStepResponse = ProjectAnalysisWorkflowResponse;
-export type MessageStepResponse = ProjectAnalysisWorkflowResponse; 
+export type MessageStepResponse = ProjectAnalysisWorkflowResponse;
+
+// Types pour les conversations IA
+export type SaveConversationInput = {
+  projectUniqueId: string;
+  conversationUrl: string;
+  model: string; // 'manus', 'chatgpt', etc.
+  taskId?: string; // Optionnel, pour lier avec le task_id de la réponse
+};
+
+export type ConversationResponse = {
+  id: string;
+  sessionId: string;
+  url: string;
+  model: string;
+  createdAt: Date;
+}; 
