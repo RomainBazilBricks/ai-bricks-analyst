@@ -23,39 +23,99 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     const validatedData = CreateProjectSchema.parse(req.body);
     const projectData: CreateProjectInput = validatedData;
 
-    // Créer le projet avec valeurs par défaut si nécessaire
-    const newProject = await db
-      .insert(projects)
+    // Vérifier si le projet existe déjà
+    let existingProject = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectData.projectUniqueId))
+      .limit(1);
+
+    let project;
+    let isNewProject = false;
+
+    if (existingProject.length > 0) {
+      // Le projet existe déjà, on l'utilise
+      project = existingProject[0];
+      console.log(`📁 Projet existant trouvé: ${projectData.projectUniqueId}`);
+    } else {
+      // Créer le nouveau projet
+      const newProject = await db
+        .insert(projects)
+        .values({
+          projectUniqueId: projectData.projectUniqueId,
+          projectName: projectData.projectName,
+          description: projectData.description || '',
+          budgetTotal: (projectData.budgetTotal || 0).toString(),
+          estimatedRoi: (projectData.estimatedRoi || 0).toString(),
+          startDate: new Date(projectData.startDate || new Date().toISOString()),
+          fundingExpectedDate: new Date(projectData.fundingExpectedDate || new Date().toISOString()),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      
+      project = newProject[0];
+      isNewProject = true;
+      console.log(`✅ Nouveau projet créé: ${projectData.projectUniqueId}`);
+    }
+
+    // Créer une nouvelle session (que le projet soit nouveau ou existant)
+    const newSession = await db
+      .insert(sessions)
       .values({
-        projectUniqueId: projectData.projectUniqueId,
-        projectName: projectData.projectName,
-        description: projectData.description || '',
-        budgetTotal: (projectData.budgetTotal || 0).toString(),
-        estimatedRoi: (projectData.estimatedRoi || 0).toString(),
-        startDate: new Date(projectData.startDate || new Date().toISOString()),
-        fundingExpectedDate: new Date(projectData.fundingExpectedDate || new Date().toISOString()),
+        projectId: project.id,
+        name: `Session ${new Date().toLocaleString('fr-FR')}`,
+        description: `Session créée automatiquement avec ${projectData.fileUrls.length} fichier(s)`,
+        status: 'open',
         createdAt: new Date(),
         updatedAt: new Date(),
       })
       .returning();
 
+    console.log(`📝 Nouvelle session créée: ${newSession[0].id}`);
+
+    // Ajouter les fichiers à la nouvelle session
+    if (projectData.fileUrls && projectData.fileUrls.length > 0) {
+      const documentsToInsert = projectData.fileUrls.map((url, index) => ({
+        sessionId: newSession[0].id,
+        fileName: `Document ${index + 1}`, // Nom par défaut, peut être amélioré
+        url: url,
+        hash: `hash-${Date.now()}-${index}`, // Hash temporaire, peut être amélioré
+        mimeType: 'application/pdf', // Type par défaut, peut être détecté
+        size: 0, // Taille par défaut, peut être récupérée
+        status: 'UPLOADED' as const,
+        uploadedAt: new Date(),
+      }));
+
+      const insertedDocuments = await db
+        .insert(documents)
+        .values(documentsToInsert)
+        .returning();
+
+      console.log(`📎 ${insertedDocuments.length} fichier(s) ajouté(s) à la session ${newSession[0].id}`);
+    }
+
     const response: ProjectResponse = {
-      ...newProject[0],
-      budgetTotal: parseFloat(newProject[0].budgetTotal),
-      estimatedRoi: parseFloat(newProject[0].estimatedRoi),
+      ...project,
+      budgetTotal: parseFloat(project.budgetTotal),
+      estimatedRoi: parseFloat(project.estimatedRoi),
     } as ProjectResponse;
 
-    // Initier automatiquement le workflow d'analyse
-    try {
-      const workflowResult = await initiateWorkflowForProject(projectData.projectUniqueId);
-      if (workflowResult.success) {
-        console.log(`✅ Workflow initié automatiquement pour le projet ${projectData.projectUniqueId} avec ${workflowResult.stepsCreated} étapes`);
-      } else {
-        console.warn(`⚠️ Impossible d'initier le workflow pour le projet ${projectData.projectUniqueId}: ${workflowResult.error}`);
+    // Initier automatiquement le workflow d'analyse seulement pour les nouveaux projets
+    if (isNewProject) {
+      try {
+        const workflowResult = await initiateWorkflowForProject(projectData.projectUniqueId);
+        if (workflowResult.success) {
+          console.log(`✅ Workflow initié automatiquement pour le nouveau projet ${projectData.projectUniqueId} avec ${workflowResult.stepsCreated} étapes`);
+        } else {
+          console.warn(`⚠️ Impossible d'initier le workflow pour le projet ${projectData.projectUniqueId}: ${workflowResult.error}`);
+        }
+      } catch (workflowError) {
+        // Ne pas faire échouer la création du projet si le workflow échoue
+        console.error(`❌ Erreur lors de l'initiation automatique du workflow pour le projet ${projectData.projectUniqueId}:`, workflowError);
       }
-    } catch (workflowError) {
-      // Ne pas faire échouer la création du projet si le workflow échoue
-      console.error(`❌ Erreur lors de l'initiation automatique du workflow pour le projet ${projectData.projectUniqueId}:`, workflowError);
+    } else {
+      console.log(`📁 Projet existant: pas d'initiation de workflow`);
     }
 
     res.status(201).json(response);
