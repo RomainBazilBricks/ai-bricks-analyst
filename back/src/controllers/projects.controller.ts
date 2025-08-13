@@ -23,17 +23,17 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     const validatedData = CreateProjectSchema.parse(req.body);
     const projectData: CreateProjectInput = validatedData;
 
-    // Créer le projet
+    // Créer le projet avec valeurs par défaut si nécessaire
     const newProject = await db
       .insert(projects)
       .values({
         projectUniqueId: projectData.projectUniqueId,
         projectName: projectData.projectName,
-        description: projectData.description,
-        budgetTotal: projectData.budgetTotal.toString(),
-        estimatedRoi: projectData.estimatedRoi.toString(),
-        startDate: new Date(projectData.startDate),
-        fundingExpectedDate: new Date(projectData.fundingExpectedDate),
+        description: projectData.description || '',
+        budgetTotal: (projectData.budgetTotal || 0).toString(),
+        estimatedRoi: (projectData.estimatedRoi || 0).toString(),
+        startDate: new Date(projectData.startDate || new Date().toISOString()),
+        fundingExpectedDate: new Date(projectData.fundingExpectedDate || new Date().toISOString()),
         createdAt: new Date(),
         updatedAt: new Date(),
       })

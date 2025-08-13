@@ -219,11 +219,11 @@ export const api_configurations = pgTable('api_configurations', {
 export const CreateProjectSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   projectName: z.string().min(1, 'ProjectName is required'),
-  description: z.string().min(1, 'Description is required'),
-  budgetTotal: z.number().positive('Budget must be positive'),
-  estimatedRoi: z.number().positive('ROI must be positive'),
-  startDate: z.string().datetime('Valid start date required'),
-  fundingExpectedDate: z.string().datetime('Valid funding expected date required'),
+  description: z.string().optional().default(''), // Optionnel avec valeur par défaut
+  budgetTotal: z.number().optional().default(0), // Optionnel avec valeur par défaut
+  estimatedRoi: z.number().optional().default(0), // Optionnel avec valeur par défaut
+  startDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
+  fundingExpectedDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
   fileUrls: z.array(z.string().url('Must be valid URLs')).min(1, 'At least one file URL is required'),
 });
 

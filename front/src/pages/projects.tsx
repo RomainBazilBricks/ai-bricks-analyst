@@ -63,12 +63,8 @@ export const ProjectsPage = () => {
     const projectData: CreateProjectInput = {
       projectUniqueId: projectUniqueId.trim(),
       projectName: projectName.trim(),
-      description: '', // Valeur par défaut
-      budgetTotal: 0, // Valeur par défaut
-      estimatedRoi: 0, // Valeur par défaut
-      startDate: new Date().toISOString().split('T')[0], // Date d'aujourd'hui
-      fundingExpectedDate: new Date().toISOString().split('T')[0], // Date d'aujourd'hui
       fileUrls: urlsArray
+      // Les autres champs sont optionnels et auront des valeurs par défaut côté backend
     };
 
     try {

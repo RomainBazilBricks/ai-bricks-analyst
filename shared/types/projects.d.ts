@@ -35,11 +35,11 @@ export type Synthesis = {
 export type CreateProjectInput = {
   projectUniqueId: string;
   projectName: string;
-  description: string;
-  budgetTotal: number;
-  estimatedRoi: number;
-  startDate: string;
-  fundingExpectedDate: string;
+  description?: string; // Optionnel
+  budgetTotal?: number; // Optionnel
+  estimatedRoi?: number; // Optionnel
+  startDate?: string; // Optionnel
+  fundingExpectedDate?: string; // Optionnel
   fileUrls: string[];
 };
 
