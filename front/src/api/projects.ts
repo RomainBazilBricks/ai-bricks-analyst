@@ -7,7 +7,8 @@ import type {
   DocumentResponse,
   PostSynthesisInput,
   SynthesisResponse,
-  UpdateProjectConversationInput
+  UpdateProjectConversationInput,
+  ProjectDocumentUrls
 } from "@shared/types/projects";
 
 /**
@@ -76,4 +77,17 @@ export const usePostSynthesis = (options = {}) =>
  * Hook pour mettre à jour l'URL de conversation d'un projet
  */
 export const useUpdateProjectConversationUrl = (options = {}) =>
-  useMutator<UpdateProjectConversationInput, ProjectResponse>("/projects/conversation-url", options); 
+  useMutator<UpdateProjectConversationInput, ProjectResponse>("/projects/conversation-url", options);
+
+/**
+ * Hook pour récupérer uniquement les URLs des documents d'un projet spécifique (pour les prompts d'IA)
+ */
+export const useGetProjectDocumentUrls = (projectUniqueId: string, options = {}) =>
+  useFetcher<undefined, ProjectDocumentUrls>({
+    key: ["projects", projectUniqueId, "document-urls"],
+    path: `/projects/${projectUniqueId}/document-urls`,
+    options: {
+      enabled: !!projectUniqueId,
+      ...options,
+    },
+  }); 

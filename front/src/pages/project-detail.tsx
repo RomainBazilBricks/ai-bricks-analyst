@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useGetProjectById } from "@/api/projects";
 import { useSendMessageToTool } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
+import { ProjectDocuments } from "@/components/project-documents";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -461,6 +462,11 @@ export const ProjectDetailPage = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Documents du projet */}
+          <div data-section="documents">
+            <ProjectDocuments projectUniqueId={projectUniqueId!} />
+          </div>
         </div>
 
         {/* Colonne latérale - Métadonnées */}
@@ -505,9 +511,18 @@ export const ProjectDetailPage = () => {
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Nouveau message
                 </Button>
-                <Button variant="outline" className="w-full justify-start" disabled>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start"
+                  onClick={() => {
+                    const documentsSection = document.querySelector('[data-section="documents"]');
+                    if (documentsSection) {
+                      documentsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Documents (Bientôt)
+                  Voir les documents
                 </Button>
                 <Button variant="outline" className="w-full justify-start" disabled>
                   <TrendingUp className="h-4 w-4 mr-2" />

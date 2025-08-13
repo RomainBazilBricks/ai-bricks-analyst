@@ -20,6 +20,7 @@ export type Document = {
   hash: string;
   mimeType: string;
   size: number;
+  status: 'UPLOADED' | 'PROCESSED' | 'ERROR';
   uploadedAt: Date;
 };
 
@@ -107,6 +108,12 @@ export type SingleProjectFilesResponse = {
     size: number;
     uploadedAt: Date;
   }[];
+};
+
+// Type pour la réponse simplifiée des URLs de documents (pour les prompts d'IA)
+export type ProjectDocumentUrls = {
+  projectUniqueId: string;
+  documentUrls: string[];
 };
 
 // Types pour le système de workflow d'analyse

@@ -3,7 +3,8 @@ import {
   createProject, 
   getPaginatedProjects, 
   getProjectById,
-  getProjectDocuments
+  getProjectDocuments,
+  getProjectDocumentUrls
 } from '@/controllers/projects.controller';
 
 const router = Router();
@@ -39,5 +40,13 @@ router.get('/:projectUniqueId', getProjectById);
  * @returns {DocumentResponse[]} Liste des documents du projet
  */
 router.get('/:projectUniqueId/documents', getProjectDocuments);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/document-urls
+ * @description Récupère uniquement les URLs des documents d'un projet spécifique (pour les prompts d'IA)
+ * @param projectUniqueId - Identifiant unique du projet
+ * @returns {ProjectDocumentUrls} Liste des URLs des documents du projet
+ */
+router.get('/:projectUniqueId/document-urls', getProjectDocumentUrls);
 
 export default router; 

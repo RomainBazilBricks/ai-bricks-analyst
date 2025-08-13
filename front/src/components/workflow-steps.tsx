@@ -93,8 +93,12 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
     setSendingPrompts(prev => new Set(prev).add(stepId));
     
     try {
+      // Remplacer les placeholders {projectUniqueId} par la vraie valeur
+      const rawPrompt = step.step?.prompt || step.prompt;
+      const processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      
       const promptData: AIPromptRequest = {
-        prompt: step.step?.prompt || step.prompt,
+        prompt: processedPrompt,
         projectUniqueId,
         stepId,
         stepName: step.step?.name || step.name,
@@ -132,9 +136,13 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
 
   // Fonction pour afficher le prompt
   const handleShowPrompt = (step: any) => {
+    // Remplacer les placeholders {projectUniqueId} par la vraie valeur pour l'affichage
+    const rawPrompt = step.step?.prompt || step.prompt || '';
+    const processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+    
     setSelectedPrompt({
       step,
-      prompt: step.step?.prompt || step.prompt || ''
+      prompt: processedPrompt
     });
   };
 
@@ -399,7 +407,7 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
                               Voir le prompt d'analyse
                             </summary>
                             <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                              {step.step.prompt}
+                              {step.step.prompt.replace(/{projectUniqueId}/g, projectUniqueId)}
                             </div>
                           </details>
                         )}

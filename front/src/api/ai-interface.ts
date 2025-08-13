@@ -25,7 +25,7 @@ const usePythonApiUrl = () => {
   const { data: apiConfig, isLoading } = useGetActivePythonApiConfig();
   
   // Fallback vers la variable d'environnement si pas de configuration en base
-  const fallbackUrl = import.meta.env.VITE_AI_INTERFACE_ACTION_URL || 'https://fbef64427d95.ngrok-free.app';
+  const fallbackUrl = import.meta.env.VITE_AI_INTERFACE_ACTION_URL || 'https://64239c9ce527.ngrok-free.app';
   
   return {
     url: apiConfig?.url || fallbackUrl,
@@ -51,7 +51,7 @@ export const sendPromptToAI = async (data: AIPromptRequest, apiUrl?: string): Pr
   const requestPromise = (async (): Promise<AIPromptResponse> => {
     try {
       // Utiliser l'URL fournie ou fallback
-      const baseURL = apiUrl || import.meta.env.VITE_AI_INTERFACE_ACTION_URL || 'https://fbef64427d95.ngrok-free.app';
+      const baseURL = apiUrl || import.meta.env.VITE_AI_INTERFACE_ACTION_URL || 'https://64239c9ce527.ngrok-free.app';
       
       const aiAxiosInstance = axios.create({
         baseURL,

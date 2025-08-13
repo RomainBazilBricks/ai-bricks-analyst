@@ -8,7 +8,8 @@ import type {
   ProjectResponse, 
   PaginatedProjectsResponse,
   ProjectWithDocumentsResponse,
-  DocumentResponse
+  DocumentResponse,
+  ProjectDocumentUrls
 } from '@shared/types/projects';
 
 /**
@@ -257,6 +258,7 @@ export const getProjectDocuments = async (req: Request, res: Response): Promise<
           hash: documents.hash,
           mimeType: documents.mimeType,
           size: documents.size,
+          status: documents.status,
           uploadedAt: documents.uploadedAt,
         })
         .from(documents)
@@ -279,6 +281,64 @@ export const getProjectDocuments = async (req: Request, res: Response): Promise<
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'FETCH_DOCUMENTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Récupère uniquement les URLs des documents d'un projet spécifique (pour les prompts d'IA)
+ * @route GET /api/projects/:projectUniqueId/document-urls
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {ProjectDocumentUrls} Liste des URLs des documents du projet
+ */
+export const getProjectDocumentUrls = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer uniquement les URLs des documents via les sessions
+    let documentUrls: string[] = [];
+    
+    try {
+      const projectDocuments = await db
+        .select({
+          url: documents.url,
+        })
+        .from(documents)
+        .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+        .where(eq(sessions.projectId, project[0].id));
+
+      documentUrls = projectDocuments.map(doc => doc.url);
+    } catch (dbError) {
+      console.warn('Error fetching document URLs (returning empty array):', dbError);
+      // Retourner un tableau vide si les tables n'existent pas encore
+    }
+
+    const response: ProjectDocumentUrls = {
+      projectUniqueId,
+      documentUrls
+    };
+
+    res.json(response);
+    
+  } catch (error) {
+    console.error('Error fetching project document URLs:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_DOCUMENT_URLS_ERROR'
     });
   }
 }; 
