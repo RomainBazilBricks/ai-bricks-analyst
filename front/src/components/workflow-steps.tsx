@@ -93,9 +93,16 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
     setSendingPrompts(prev => new Set(prev).add(stepId));
     
     try {
-      // Remplacer les placeholders {projectUniqueId} par la vraie valeur
+      // Remplacer les placeholders par les vraies valeurs
       const rawPrompt = step.step?.prompt || step.prompt;
-      const processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      let processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      
+      // Remplacer {documentListUrl} par l'URL de la page des documents
+      if (processedPrompt.includes('{documentListUrl}')) {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+        const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+        processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+      }
       
       const promptData: AIPromptRequest = {
         prompt: processedPrompt,
@@ -136,9 +143,16 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
 
   // Fonction pour afficher le prompt
   const handleShowPrompt = (step: any) => {
-    // Remplacer les placeholders {projectUniqueId} par la vraie valeur pour l'affichage
+    // Remplacer les placeholders par les vraies valeurs pour l'affichage
     const rawPrompt = step.step?.prompt || step.prompt || '';
-    const processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+    let processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+    
+    // Remplacer {documentListUrl} par l'URL de la page des documents
+    if (processedPrompt.includes('{documentListUrl}')) {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+      const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+      processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+    }
     
     setSelectedPrompt({
       step,
@@ -407,7 +421,15 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
                               Voir le prompt d'analyse
                             </summary>
                             <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                              {step.step.prompt.replace(/{projectUniqueId}/g, projectUniqueId)}
+                              {(() => {
+                                let processedPrompt = step.step.prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+                                if (processedPrompt.includes('{documentListUrl}')) {
+                                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+                                  const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+                                  processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+                                }
+                                return processedPrompt;
+                              })()}
                             </div>
                           </details>
                         )}

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import axios from 'axios';
 import { db } from '@/db/index';
 import { 
   projects, 
@@ -6,6 +7,9 @@ import {
   project_analysis_workflow,
   missing_documents,
   vigilance_points,
+  conversations_with_ai,
+  sessions,
+  documents,
   CreateAnalysisStepSchema,
   UpdateWorkflowStepSchema,
   InitiateWorkflowSchema,
@@ -16,7 +20,7 @@ import {
   VigilancePointsPayloadSchema,
   WorkflowStatus
 } from '@/db/schema';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, desc } from 'drizzle-orm';
 import type { 
   CreateAnalysisStepInput,
   UpdateWorkflowStepInput,
@@ -26,6 +30,74 @@ import type {
   ProjectAnalysisWorkflowResponse,
   WorkflowStepEndpointInput
 } from '@shared/types/projects';
+
+/**
+ * Fonction utilitaire pour envoyer un prompt à l'IA externe
+ */
+const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
+  try {
+    // URL de l'API externe (à configurer selon l'environnement)
+    const aiApiUrl = process.env.AI_INTERFACE_URL || 'https://64239c9ce527.ngrok-free.app';
+    
+    console.log(`🚀 Envoi automatique du prompt à l'IA pour l'étape: ${stepName}`);
+    if (conversationUrl) {
+      console.log(`🔗 Continuation de la conversation: ${conversationUrl}`);
+    }
+    
+    // Générer l'URL de la page des documents si le placeholder {documentListUrl} est présent
+    let documentListUrl = '';
+    if (prompt.includes('{documentListUrl}')) {
+      // URL de base de l'API (à configurer selon l'environnement)
+      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+      documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+    }
+    
+    // Remplacer les placeholders dans le prompt
+    let processedPrompt = prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+    processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+    
+    // Préparer le payload avec l'URL de conversation si disponible
+    const payload: any = {
+      message: processedPrompt,
+      platform: 'manus',
+      projectUniqueId,
+      stepId,
+      stepName,
+    };
+
+    // Ajouter conversation_url si disponible pour continuer la même session
+    if (conversationUrl) {
+      payload.conversation_url = conversationUrl;
+    }
+    
+    const response = await axios.post(`${aiApiUrl}/send-message`, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 10000, // 10 secondes de timeout
+    });
+
+    if (response.data.success !== false) {
+      console.log(`✅ Prompt envoyé avec succès à l'IA pour l'étape: ${stepName}`);
+      return {
+        success: true,
+        conversationUrl: response.data.conversation_url
+      };
+    } else {
+      console.error(`❌ Erreur de l'IA pour l'étape ${stepName}:`, response.data.message);
+      return {
+        success: false,
+        error: response.data.message || 'Erreur inconnue de l\'IA'
+      };
+    }
+  } catch (error: any) {
+    console.error(`❌ Erreur lors de l'envoi du prompt à l'IA pour l'étape ${stepName}:`, error.message);
+    return {
+      success: false,
+      error: error.message || 'Erreur de connexion à l\'IA'
+    };
+  }
+};
 
 /**
  * Initialise les étapes d'analyse par défaut dans la base de données
@@ -603,14 +675,18 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
       });
     }
 
-    // Trouver l'étape d'analyse macro (ordre 1)
+    // Trouver l'étape d'analyse macro (étape avec order = 1, qui est "Analyse globale")
     const workflowStep = await db
-      .select()
+      .select({
+        workflow: project_analysis_workflow,
+        step: analysis_steps
+      })
       .from(project_analysis_workflow)
+      .leftJoin(analysis_steps, eq(project_analysis_workflow.stepId, analysis_steps.id))
       .where(
         and(
           eq(project_analysis_workflow.projectId, project[0].id),
-          eq(project_analysis_workflow.stepId, 1) // Étape 1 = analyse macro
+          eq(analysis_steps.order, 1) // Étape avec order = 1 = analyse macro
         )
       )
       .limit(1);
@@ -631,8 +707,103 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
         completedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(project_analysis_workflow.id, workflowStep[0].id))
+      .where(eq(project_analysis_workflow.id, workflowStep[0].workflow.id))
       .returning();
+
+    // Déclencher automatiquement l'étape suivante (ordre 2)
+    try {
+      const nextStep = await db
+        .select({
+          workflow: project_analysis_workflow,
+          step: analysis_steps
+        })
+        .from(project_analysis_workflow)
+        .leftJoin(analysis_steps, eq(project_analysis_workflow.stepId, analysis_steps.id))
+        .where(
+          and(
+            eq(project_analysis_workflow.projectId, project[0].id),
+            eq(analysis_steps.order, 2) // Étape suivante avec order = 2
+          )
+        )
+        .limit(1);
+
+      if (nextStep.length > 0 && nextStep[0].step) {
+        // Marquer l'étape suivante comme en cours
+        await db
+          .update(project_analysis_workflow)
+          .set({
+            status: 'in_progress',
+            startedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
+        
+        console.log(`✅ Étape suivante (${nextStep[0].step.name}) marquée comme en cours`);
+
+        // Récupérer l'URL de conversation de l'étape précédente (étape 1 qui vient d'être complétée)
+        let previousStepConversationUrl = workflowStep[0].workflow.manusConversationUrl;
+        
+        // Si pas d'URL dans le workflow, chercher dans la table conversations_with_ai
+        if (!previousStepConversationUrl) {
+          try {
+            const latestConversation = await db
+              .select({
+                url: conversations_with_ai.url
+              })
+              .from(conversations_with_ai)
+              .innerJoin(sessions, eq(conversations_with_ai.sessionId, sessions.id))
+              .where(eq(sessions.projectId, project[0].id))
+              .orderBy(desc(conversations_with_ai.createdAt))
+              .limit(1);
+              
+            if (latestConversation.length > 0) {
+              previousStepConversationUrl = latestConversation[0].url;
+              console.log(`🔍 URL de conversation récupérée depuis conversations_with_ai: ${previousStepConversationUrl}`);
+            }
+          } catch (error) {
+            console.warn('⚠️ Impossible de récupérer l\'URL de conversation depuis conversations_with_ai:', error);
+          }
+        }
+
+        // Envoyer le prompt de l'étape suivante à l'IA avec l'URL de conversation
+        const aiResult = await sendPromptToAI(
+          nextStep[0].step.prompt,
+          projectUniqueId,
+          nextStep[0].workflow.stepId,
+          nextStep[0].step.name,
+          previousStepConversationUrl || undefined
+        );
+
+        if (aiResult.success) {
+          console.log(`🎉 Prompt de l'étape "${nextStep[0].step.name}" envoyé avec succès à l'IA`);
+          
+          // Sauver l'URL de conversation (mise à jour ou nouvelle)
+          if (aiResult.conversationUrl) {
+            await db
+              .update(project_analysis_workflow)
+              .set({
+                manusConversationUrl: aiResult.conversationUrl,
+                updatedAt: new Date(),
+              })
+              .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
+          }
+        } else {
+          console.error(`❌ Échec de l'envoi du prompt pour l'étape "${nextStep[0].step.name}":`, aiResult.error);
+          
+          // Marquer l'étape comme échouée
+          await db
+            .update(project_analysis_workflow)
+            .set({
+              status: 'failed',
+              updatedAt: new Date(),
+            })
+            .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Impossible de déclencher l\'étape suivante:', error);
+      // Ne pas faire échouer la réponse principale
+    }
 
     res.status(200).json({
       success: true,
@@ -746,8 +917,9 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       projectId: project[0].id,
       name: doc.name,
       whyMissing: doc.whyMissing,
+      impactOnProject: doc.impactOnProject,
       status: 'pending' as const,
-      whyStatus: `Priorité: ${doc.priority}, Catégorie: ${doc.category}, Impact: ${doc.impactOnProject}`,
+      whyStatus: '',
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
@@ -801,6 +973,51 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
 };
 
 /**
+ * Endpoint de test pour voir comment les placeholders sont remplacés dans un prompt
+ * @route GET /api/workflow/test-prompt/:projectUniqueId
+ */
+export const testPromptProcessing = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const { prompt } = req.query;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ 
+        error: 'Le paramètre "prompt" est requis',
+        code: 'MISSING_PROMPT'
+      });
+    }
+
+    // Générer l'URL de la page des documents si le placeholder {documentListUrl} est présent
+    let documentListUrl = '';
+    if (prompt.includes('{documentListUrl}')) {
+      // URL de base de l'API (à configurer selon l'environnement)
+      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+      documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+    }
+    
+    // Remplacer les placeholders dans le prompt
+    let processedPrompt = prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+    processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+
+    res.json({
+      originalPrompt: prompt,
+      processedPrompt: processedPrompt,
+      replacements: {
+        projectUniqueId: projectUniqueId,
+        documentListUrl: documentListUrl || 'Non utilisé'
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'TEST_PROMPT_ERROR'
+    });
+  }
+};
+
+/**
  * Endpoint pour recevoir les points de vigilance de l'IA (Étape 4)
  * @route POST /api/workflow/vigilance-points/:projectUniqueId
  */
@@ -831,8 +1048,10 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
       title: point.title,
       whyVigilance: point.whyVigilance,
       riskLevel: point.riskLevel,
+      potentialImpact: point.potentialImpact,
+      recommendations: point.recommendations,
       status: 'pending' as const,
-      whyStatus: `Catégorie: ${point.category}, Impact: ${point.potentialImpact}`,
+      whyStatus: '',
       createdAt: new Date(),
       updatedAt: new Date(),
     }));

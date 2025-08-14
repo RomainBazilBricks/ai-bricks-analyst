@@ -8,7 +8,9 @@ import type {
   PostSynthesisInput,
   SynthesisResponse,
   UpdateProjectConversationInput,
-  ProjectDocumentUrls
+  ProjectDocumentUrls,
+  DeleteProjectInput,
+  DeleteProjectResponse
 } from "@shared/types/projects";
 
 /**
@@ -90,4 +92,10 @@ export const useGetProjectDocumentUrls = (projectUniqueId: string, options = {})
       enabled: !!projectUniqueId,
       ...options,
     },
-  }); 
+  });
+
+/**
+ * Hook pour supprimer un projet et toutes ses données associées
+ */
+export const useDeleteProject = (options = {}) =>
+  useMutator<DeleteProjectInput, DeleteProjectResponse>("/projects/delete", options); 

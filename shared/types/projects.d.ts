@@ -78,6 +78,22 @@ export type UpdateProjectConversationInput = {
   conversationUrl: string;
 };
 
+export type DeleteProjectInput = {
+  projectUniqueId: string;
+};
+
+export type DeleteProjectResponse = {
+  success: boolean;
+  message: string;
+  deletedItems: {
+    project: boolean;
+    sessions: number;
+    documents: number;
+    workflow: number;
+    conversations: number;
+  };
+};
+
 // Pagination types
 export type PaginatedProjectsResponse = {
   items: ProjectResponse[];

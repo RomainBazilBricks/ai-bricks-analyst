@@ -14,6 +14,7 @@ import {
   receiveAnalysisMacro,
   receiveAnalysisDescription,
   receiveMissingDocuments,
+  testPromptProcessing,
   receiveVigilancePoints
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
@@ -171,5 +172,14 @@ router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
  * @access Public (pour IA)
  */
 router.post('/vigilance-points/:projectUniqueId', receiveVigilancePoints);
+
+/**
+ * Endpoint de test pour voir comment les placeholders sont remplacés
+ * @route GET /api/workflow/test-prompt/:projectUniqueId
+ * @param {string} prompt - Prompt à tester (en query parameter)
+ * @returns {Object} Prompt original et traité avec les remplacements
+ * @access Public (pour test)
+ */
+router.get('/test-prompt/:projectUniqueId', testPromptProcessing);
 
 export default router; 

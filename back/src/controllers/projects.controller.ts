@@ -1,7 +1,19 @@
 import { Request, Response } from 'express';
 import { eq, desc, gt, lt, asc } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { projects, sessions, documents, CreateProjectSchema } from '@/db/schema';
+import { 
+  projects, 
+  sessions, 
+  documents, 
+  CreateProjectSchema,
+  conversations_with_ai,
+  project_owners,
+  companies,
+  missing_documents,
+  vigilance_points,
+  conversations,
+  project_analysis_workflow
+} from '@/db/schema';
 import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
 import type { 
   CreateProjectInput, 
@@ -9,7 +21,9 @@ import type {
   PaginatedProjectsResponse,
   ProjectWithDocumentsResponse,
   DocumentResponse,
-  ProjectDocumentUrls
+  ProjectDocumentUrls,
+  DeleteProjectInput,
+  DeleteProjectResponse
 } from '@shared/types/projects';
 
 /**
@@ -339,6 +353,247 @@ export const getProjectDocumentUrls = async (req: Request, res: Response): Promi
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'FETCH_DOCUMENT_URLS_ERROR'
+    });
+  }
+};
+
+/**
+ * Génère une page HTML simple listant les documents d'un projet (pour l'IA)
+ * @route GET /api/projects/:projectUniqueId/documents-list
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {string} Page HTML avec la liste des documents
+ */
+export const getProjectDocumentsListPage = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id, projectName: projects.projectName })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Projet non trouvé</title>
+          <meta charset="utf-8">
+        </head>
+        <body>
+          <h1>Erreur 404</h1>
+          <p>Le projet "${projectUniqueId}" n'existe pas.</p>
+        </body>
+        </html>
+      `);
+    }
+
+    // Récupérer les documents du projet
+    let projectDocuments: any[] = [];
+    
+    try {
+      projectDocuments = await db
+        .select({
+          fileName: documents.fileName,
+          url: documents.url,
+          mimeType: documents.mimeType,
+          size: documents.size,
+          uploadedAt: documents.uploadedAt,
+        })
+        .from(documents)
+        .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+        .where(eq(sessions.projectId, project[0].id))
+        .orderBy(asc(documents.uploadedAt));
+    } catch (dbError) {
+      console.warn('Error fetching documents for list page:', dbError);
+    }
+
+    // Générer la liste simple des URLs
+    const documentsList = projectDocuments.length > 0 
+      ? projectDocuments.map(doc => `<li><a href="${doc.url}" target="_blank">${doc.url}</a></li>`).join('')
+      : '<li>Aucun document disponible pour ce projet.</li>';
+
+    const htmlPage = `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <title>Documents - ${project[0].projectName}</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            line-height: 1.6;
+          }
+          ul { 
+            list-style-type: none; 
+            padding: 0; 
+          }
+          li { 
+            margin-bottom: 10px; 
+          }
+          a { 
+            color: #0066cc; 
+            text-decoration: none;
+            word-break: break-all;
+          }
+          a:hover { 
+            text-decoration: underline; 
+          }
+        </style>
+      </head>
+      <body>
+        <ul>
+          ${documentsList}
+        </ul>
+      </body>
+      </html>
+    `;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(htmlPage);
+    
+  } catch (error) {
+    console.error('Error generating documents list page:', error);
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Erreur</title>
+        <meta charset="utf-8">
+      </head>
+      <body>
+        <h1>Erreur 500</h1>
+        <p>Une erreur est survenue lors de la génération de la page.</p>
+        <p>Détails: ${(error as Error).message}</p>
+      </body>
+      </html>
+    `);
+  }
+};
+
+/**
+ * Supprime un projet et toutes ses données associées
+ * @route POST /api/projects/delete
+ * @param {DeleteProjectInput} req.body - Données de suppression du projet
+ * @returns {DeleteProjectResponse} Résultat de la suppression
+ */
+export const deleteProject = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId }: DeleteProjectInput = req.body;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    const projectId = project[0].id;
+    const deletedItems = {
+      project: false,
+      sessions: 0,
+      documents: 0,
+      workflow: 0,
+      conversations: 0,
+    };
+
+    console.log(`🗑️ Début de la suppression du projet ${projectUniqueId} (ID: ${projectId})`);
+
+    // 1. Supprimer les sessions et leurs données associées
+    const projectSessions = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(eq(sessions.projectId, projectId));
+
+    for (const session of projectSessions) {
+      // Supprimer les conversations avec IA de cette session
+      const aiConversationsDeleted = await db
+        .delete(conversations_with_ai)
+        .where(eq(conversations_with_ai.sessionId, session.id));
+      
+      // Supprimer les conversations de cette session
+      const conversationsDeleted = await db
+        .delete(conversations)
+        .where(eq(conversations.sessionId, session.id));
+      
+      // Supprimer les documents de cette session
+      const documentsDeleted = await db
+        .delete(documents)
+        .where(eq(documents.sessionId, session.id));
+      
+      deletedItems.documents += documentsDeleted.rowCount || 0;
+      deletedItems.conversations += (aiConversationsDeleted.rowCount || 0) + (conversationsDeleted.rowCount || 0);
+    }
+
+    // Supprimer les sessions
+    const sessionsDeleted = await db
+      .delete(sessions)
+      .where(eq(sessions.projectId, projectId));
+    
+    deletedItems.sessions = sessionsDeleted.rowCount || 0;
+
+    // 2. Supprimer les données directement liées au projet
+    
+    // Supprimer les propriétaires du projet
+    await db
+      .delete(project_owners)
+      .where(eq(project_owners.projectId, projectId));
+
+    // Supprimer les entreprises du projet
+    await db
+      .delete(companies)
+      .where(eq(companies.projectId, projectId));
+
+    // Supprimer les documents manquants
+    await db
+      .delete(missing_documents)
+      .where(eq(missing_documents.projectId, projectId));
+
+    // Supprimer les points de vigilance
+    await db
+      .delete(vigilance_points)
+      .where(eq(vigilance_points.projectId, projectId));
+
+    // Supprimer le workflow d'analyse
+    const workflowDeleted = await db
+      .delete(project_analysis_workflow)
+      .where(eq(project_analysis_workflow.projectId, projectId));
+    
+    deletedItems.workflow = workflowDeleted.rowCount || 0;
+
+    // 3. Finalement, supprimer le projet lui-même
+    const projectDeleted = await db
+      .delete(projects)
+      .where(eq(projects.id, projectId));
+    
+    deletedItems.project = (projectDeleted.rowCount || 0) > 0;
+
+    console.log(`✅ Projet ${projectUniqueId} supprimé avec succès:`, deletedItems);
+
+    const response: DeleteProjectResponse = {
+      success: true,
+      message: `Projet ${projectUniqueId} supprimé avec succès`,
+      deletedItems,
+    };
+
+    res.json(response);
+    
+  } catch (error) {
+    console.error('Error deleting project:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'DELETE_PROJECT_ERROR'
     });
   }
 }; 

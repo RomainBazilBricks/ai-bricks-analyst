@@ -44,13 +44,32 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
     mutationFn: async (data: SendMessageInput) => {
       console.log('🚀 Envoi du message vers:', toolUrl);
       
+      // Remplacer systématiquement les placeholders dans le message
+      let processedMessage = data.message;
+      
+      if (data.projectUniqueId) {
+        // Remplacer {projectUniqueId}
+        processedMessage = processedMessage.replace(/{projectUniqueId}/g, data.projectUniqueId);
+        
+        // Remplacer {documentListUrl} par l'URL de la page des documents
+        if (processedMessage.includes('{documentListUrl}')) {
+          const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+          const documentListUrl = `${baseUrl}/api/projects/${data.projectUniqueId}/documents-list`;
+          processedMessage = processedMessage.replace(/{documentListUrl}/g, documentListUrl);
+          
+          console.log('🔄 Placeholder {documentListUrl} remplacé par:', documentListUrl);
+        }
+        
+        console.log('🔄 Placeholders remplacés dans le message');
+      }
+      
       const response = await fetch(`${toolUrl}/send-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: data.message,
+          message: processedMessage, // Utiliser le message traité
           platform: data.platform,
           projectUniqueId: data.projectUniqueId, // Inclure l'ID du projet
         }),

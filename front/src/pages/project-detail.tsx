@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useGetProjectById } from "@/api/projects";
+import { useGetProjectById, useDeleteProject } from "@/api/projects";
 import { useSendMessageToTool } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
 import { ProjectDocuments } from "@/components/project-documents";
+
+import { useGetWorkflowStatus } from "@/api/workflow";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -24,11 +26,11 @@ import {
   DollarSign, 
   TrendingUp, 
   Building, 
-  User, 
   MessageSquare,
   Send,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Trash2
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 import type { SendMessageInput, SendMessageResponse } from "@/api/external-tools";
@@ -49,6 +51,23 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+// Fonctions utilitaires pour détecter les valeurs vides/par défaut
+const hasValidFinancialData = (project: any) => {
+  return project.budgetTotal > 0 || project.estimatedRoi > 0;
+};
+
+const hasValidTimelineData = (project: any) => {
+  const today = new Date();
+  const startDate = new Date(project.startDate);
+  const fundingDate = new Date(project.fundingExpectedDate);
+  
+  // Vérifier si les dates ne sont pas aujourd'hui (valeur par défaut)
+  const isStartDateDefault = Math.abs(startDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000; // moins de 24h de différence
+  const isFundingDateDefault = Math.abs(fundingDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
+  
+  return !isStartDateDefault || !isFundingDateDefault;
+};
+
 export const ProjectDetailPage = () => {
   const { projectUniqueId } = useParams<{ projectUniqueId: string }>();
   const navigate = useNavigate();
@@ -57,6 +76,9 @@ export const ProjectDetailPage = () => {
   const [message, setMessage] = useState('');
   const [platform, setPlatform] = useState('manus');
   const [showMessageInterface, setShowMessageInterface] = useState(false);
+  
+  // État pour la confirmation de suppression
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   
   // Protection contre les doubles clics
   const lastSubmitTime = useRef<number>(0);
@@ -69,6 +91,11 @@ export const ProjectDetailPage = () => {
     error,
     refetch
   } = useGetProjectById(projectUniqueId!, { enabled: !!projectUniqueId });
+
+  // Hook pour récupérer les données du workflow (contient l'analyse)
+  const {
+    data: workflowStatus
+  } = useGetWorkflowStatus(projectUniqueId!, { enabled: !!projectUniqueId });
 
   // Hooks pour les conversations IA
   const { mutateAsync: saveAIConversation } = useSaveAIConversation();
@@ -84,6 +111,13 @@ export const ProjectDetailPage = () => {
   
   // Utiliser la première conversation de la liste comme "dernière" si pas de réponse du hook latest
   const effectiveLatestConversation = latestAIConversation || (hasConversations ? allAIConversations[0] : null);
+
+  // Hook pour supprimer le projet
+  const { mutateAsync: deleteProject, isPending: isDeleting } = useDeleteProject({
+    onSuccess: () => {
+      navigate('/projects');
+    },
+  });
 
   // Hook pour envoyer un message à l'outil externe
   const { mutateAsync: sendMessage, isPending: isSending, isError: isSendError, error: sendError } = useSendMessageToTool({
@@ -145,6 +179,40 @@ export const ProjectDetailPage = () => {
       console.error('Erreur lors de l\'envoi du message:', error);
     }
   };
+
+  // Fonction pour gérer la suppression du projet
+  const handleDeleteProject = async () => {
+    if (!projectUniqueId) return;
+    
+    try {
+      await deleteProject({ projectUniqueId });
+    } catch (error) {
+      console.error('Erreur lors de la suppression du projet:', error);
+    }
+  };
+
+  // Fonction pour extraire les données d'analyse du workflow
+  const getAnalysisData = () => {
+    if (!workflowStatus?.steps) return null;
+    
+    // Chercher l'étape d'analyse globale (order = 1) qui est complétée
+    const analysisStep = workflowStatus.steps.find(step => 
+      step.step.order === 1 && 
+      step.status === 'completed' && 
+      step.content
+    );
+    
+    if (!analysisStep || !analysisStep.content) return null;
+    
+    try {
+      return JSON.parse(analysisStep.content);
+    } catch (error) {
+      console.error('Erreur lors du parsing des données d\'analyse:', error);
+      return null;
+    }
+  };
+
+  const analysisData = getAnalysisData();
 
   if (isLoading) {
     return (
@@ -288,6 +356,15 @@ export const ProjectDetailPage = () => {
           <Button variant="outline" onClick={() => refetch()}>
             Actualiser
           </Button>
+          
+          <Button 
+            variant="destructive" 
+            onClick={() => setShowDeleteConfirmation(true)}
+            className="flex items-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Supprimer le projet
+          </Button>
         </div>
       </div>
 
@@ -367,16 +444,61 @@ export const ProjectDetailPage = () => {
         </Card>
       )}
 
+      {/* Modal de confirmation de suppression */}
+      {showDeleteConfirmation && (
+        <Card className="mb-8 border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <Trash2 className="h-5 w-5" />
+              Confirmer la suppression du projet
+            </CardTitle>
+            <CardDescription className="text-red-600">
+              ⚠️ Cette action est irréversible. Toutes les données du projet seront définitivement supprimées.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="p-4 bg-white border border-red-200 rounded-lg">
+                <p className="font-medium text-gray-900 mb-2">Les données suivantes seront supprimées :</p>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  <li>• Le projet "{project?.projectName}"</li>
+                  <li>• Tous les documents associés</li>
+                  <li>• Toutes les sessions d'analyse</li>
+                  <li>• Le workflow d'analyse et ses résultats</li>
+                  <li>• Toutes les conversations IA liées au projet</li>
+                </ul>
+              </div>
+              
+              <div className="flex gap-3">
+                <Button 
+                  variant="destructive" 
+                  onClick={handleDeleteProject}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeleting ? 'Suppression en cours...' : 'Confirmer la suppression'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowDeleteConfirmation(false)}
+                  disabled={isDeleting}
+                >
+                  Annuler
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Workflow d'analyse IA */}
       <div className="mb-8">
         <WorkflowSteps projectUniqueId={projectUniqueId!} />
       </div>
 
-      {/* Grille principale */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Colonne principale - Informations du projet */}
-        <div className="lg:col-span-2 space-y-6">
+      {/* Contenu principal */}
+      <div className="space-y-6">
           
           {/* Description */}
           <Card>
@@ -388,151 +510,113 @@ export const ProjectDetailPage = () => {
             </CardHeader>
             <CardContent>
               <p className="text-gray-700 leading-relaxed">
-                {project.description || 'Aucune description disponible pour ce projet.'}
+                {analysisData?.summary || project.description || 'Aucune description disponible pour ce projet.'}
               </p>
             </CardContent>
           </Card>
 
-          {/* Métriques financières */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Informations financières
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <DollarSign className="h-8 w-8 text-blue-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Budget Total</p>
-                      <p className="text-xl font-bold text-blue-600">
-                        {formatCurrency(project.budgetTotal)}
-                      </p>
+          {/* Métriques financières - Affiché seulement si des données valides */}
+          {hasValidFinancialData(project) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Informations financières
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {project.budgetTotal > 0 && (
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <DollarSign className="h-8 w-8 text-blue-600" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">Budget Total</p>
+                          <p className="text-xl font-bold text-blue-600">
+                            {formatCurrency(project.budgetTotal)}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                
-                <div className="p-4 bg-green-50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <TrendingUp className="h-8 w-8 text-green-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">ROI Estimé</p>
-                      <p className="text-xl font-bold text-green-600">
-                        {project.estimatedRoi}%
-                      </p>
+                  )}
+                  
+                  {project.estimatedRoi > 0 && (
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <TrendingUp className="h-8 w-8 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">ROI Estimé</p>
+                          <p className="text-xl font-bold text-green-600">
+                            {project.estimatedRoi}%
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Timeline du projet */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Timeline du projet
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-purple-900">Date de début</p>
-                    <p className="text-sm text-purple-600">Lancement prévu du projet</p>
-                  </div>
-                  <p className="text-lg font-semibold text-purple-600">
-                    {formatDate(project.startDate.toString())}
-                  </p>
+          {/* Timeline du projet - Affiché seulement si des données valides */}
+          {hasValidTimelineData(project) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Timeline du projet
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(() => {
+                    const today = new Date();
+                    const startDate = new Date(project.startDate);
+                    const fundingDate = new Date(project.fundingExpectedDate);
+                    
+                    const isStartDateDefault = Math.abs(startDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
+                    const isFundingDateDefault = Math.abs(fundingDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
+                    
+                    return (
+                      <>
+                        {!isStartDateDefault && (
+                          <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
+                            <div>
+                              <p className="font-medium text-purple-900">Date de début</p>
+                              <p className="text-sm text-purple-600">Lancement prévu du projet</p>
+                            </div>
+                            <p className="text-lg font-semibold text-purple-600">
+                              {formatDate(project.startDate.toString())}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {!isFundingDateDefault && (
+                          <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
+                            <div>
+                              <p className="font-medium text-orange-900">Financement attendu</p>
+                              <p className="text-sm text-orange-600">Date limite pour obtenir le financement</p>
+                            </div>
+                            <p className="text-lg font-semibold text-orange-600">
+                              {formatDate(project.fundingExpectedDate.toString())}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
-                
-                <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-orange-900">Financement attendu</p>
-                    <p className="text-sm text-orange-600">Date limite pour obtenir le financement</p>
-                  </div>
-                  <p className="text-lg font-semibold text-orange-600">
-                    {formatDate(project.fundingExpectedDate.toString())}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Documents du projet */}
           <div data-section="documents">
             <ProjectDocuments projectUniqueId={projectUniqueId!} />
           </div>
-        </div>
 
-        {/* Colonne latérale - Métadonnées */}
-        <div className="space-y-6">
-          
-          {/* Informations système */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Informations système
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-gray-500">Créé le</p>
-                <p className="text-lg">{formatDate(project.createdAt.toString())}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm font-medium text-gray-500">Dernière modification</p>
-                <p className="text-lg">{formatDate(project.updatedAt.toString())}</p>
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Actions rapides */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Actions rapides</CardTitle>
-              <CardDescription>
-                Raccourcis vers les fonctionnalités principales
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start" 
-                  onClick={() => setShowMessageInterface(true)}
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Nouveau message
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  onClick={() => {
-                    const documentsSection = document.querySelector('[data-section="documents"]');
-                    if (documentsSection) {
-                      documentsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Voir les documents
-                </Button>
-                <Button variant="outline" className="w-full justify-start" disabled>
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Analyses (Bientôt)
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
-      </div>
     </div>
   );
 }; 

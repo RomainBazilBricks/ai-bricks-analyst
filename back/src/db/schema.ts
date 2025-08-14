@@ -129,6 +129,7 @@ export const missing_documents = pgTable('missing_documents', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 512 }).notNull(),
   whyMissing: text('why_missing').default('').notNull(), // Reason why document is missing, optional
+  impactOnProject: text('impact_on_project').default('').notNull(), // Impact of missing document on project
   status: documentStatusEnum('status').notNull().default('pending'),
   whyStatus: text('why_status').default('').notNull(), // Justification for status, optional
   updatedBy: integer('updated_by').references(() => users.id), // User who updated the status
@@ -143,6 +144,8 @@ export const vigilance_points = pgTable('vigilance_points', {
   title: varchar('title', { length: 256 }).notNull(),
   whyVigilance: text('why_vigilance').default('').notNull(), // Reason for vigilance, optional
   riskLevel: riskLevelEnum('risk_level').notNull(),
+  potentialImpact: text('potential_impact').default('').notNull(), // Impact potential on project
+  recommendations: jsonb('recommendations').default([]).notNull(), // Array of recommendation strings
   status: documentStatusEnum('status').notNull().default('pending'),
   whyStatus: text('why_status').default('').notNull(), // Justification for status, optional
   updatedBy: integer('updated_by').references(() => users.id), // User who updated the status
@@ -482,10 +485,7 @@ export const MissingDocumentsPayloadSchema = z.object({
   missingDocuments: z.array(z.object({
     name: z.string().min(1, 'Document name is required'),
     whyMissing: z.string().min(1, 'Reason for missing document is required'),
-    priority: z.enum(['low', 'medium', 'high']),
-    category: z.enum(['legal', 'financial', 'technical', 'business', 'regulatory']),
     impactOnProject: z.string().min(1, 'Impact on project is required'),
-    suggestedSources: z.array(z.string().min(1)),
   })).min(1, 'At least one missing document is required'),
 });
 
@@ -496,10 +496,8 @@ export const VigilancePointsPayloadSchema = z.object({
     title: z.string().min(1, 'Vigilance point title is required'),
     whyVigilance: z.string().min(1, 'Reason for vigilance is required'),
     riskLevel: z.enum(['low', 'medium', 'high']),
-    category: z.enum(['financial', 'technical', 'legal', 'market', 'operational', 'regulatory']),
     potentialImpact: z.string().min(1, 'Potential impact is required'),
-    mitigationStrategies: z.array(z.string().min(1)),
-    monitoringRecommendations: z.array(z.string().min(1)),
+    recommendations: z.array(z.string().min(1)),
   })).min(1, 'At least one vigilance point is required'),
 });
 

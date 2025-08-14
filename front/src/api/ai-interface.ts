@@ -60,10 +60,29 @@ export const sendPromptToAI = async (data: AIPromptRequest, apiUrl?: string): Pr
         },
       });
 
+      // Remplacer systématiquement les placeholders dans le prompt
+      let processedPrompt = data.prompt;
+      
+      if (data.projectUniqueId) {
+        // Remplacer {projectUniqueId}
+        processedPrompt = processedPrompt.replace(/{projectUniqueId}/g, data.projectUniqueId);
+        
+        // Remplacer {documentListUrl} par l'URL de la page des documents
+        if (processedPrompt.includes('{documentListUrl}')) {
+          const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+          const documentListUrl = `${baseUrl}/api/projects/${data.projectUniqueId}/documents-list`;
+          processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+          
+          console.log('🔄 Placeholder {documentListUrl} remplacé par:', documentListUrl);
+        }
+        
+        console.log('🔄 Placeholders remplacés dans le prompt IA');
+      }
+
       console.log('🚀 Envoi du prompt à l\'IA:', { projectUniqueId: data.projectUniqueId, stepId: data.stepId });
 
       const response = await aiAxiosInstance.post('/send-message', {
-        message: data.prompt,
+        message: processedPrompt, // Utiliser le prompt traité
         platform: data.platform || 'manus', // Défaut à manus pour les prompts IA
         projectUniqueId: data.projectUniqueId,
         // Informations supplémentaires pour l'IA (optionnelles)

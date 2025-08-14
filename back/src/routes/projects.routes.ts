@@ -4,7 +4,9 @@ import {
   getPaginatedProjects, 
   getProjectById,
   getProjectDocuments,
-  getProjectDocumentUrls
+  getProjectDocumentUrls,
+  getProjectDocumentsListPage,
+  deleteProject
 } from '@/controllers/projects.controller';
 
 const router = Router();
@@ -48,5 +50,21 @@ router.get('/:projectUniqueId/documents', getProjectDocuments);
  * @returns {ProjectDocumentUrls} Liste des URLs des documents du projet
  */
 router.get('/:projectUniqueId/document-urls', getProjectDocumentUrls);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/documents-list
+ * @description Génère une page HTML listant les documents d'un projet (pour l'IA)
+ * @param projectUniqueId - Identifiant unique du projet
+ * @returns {string} Page HTML avec la liste des documents
+ */
+router.get('/:projectUniqueId/documents-list', getProjectDocumentsListPage);
+
+/**
+ * @route POST /api/projects/delete
+ * @description Supprime un projet et toutes ses données associées
+ * @body { projectUniqueId: string }
+ * @returns {DeleteProjectResponse} Résultat de la suppression
+ */
+router.post('/delete', deleteProject);
 
 export default router; 
