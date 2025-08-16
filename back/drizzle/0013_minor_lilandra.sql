@@ -1,0 +1,2 @@
+CREATE TYPE "public"."project_typology" AS ENUM('marchand_de_bien', 'projet_locatif', 'projet_exploitation', 'promotion_immobiliere');--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "typologie" "project_typology";

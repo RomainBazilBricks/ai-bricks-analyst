@@ -47,9 +47,9 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 flex">
-      {/* Sidebar Navigation */}
-      <aside className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col">
+    <div className="w-full min-h-screen bg-gray-50">
+      {/* Sidebar Navigation - Fixed */}
+      <aside className="fixed top-0 left-0 w-64 h-screen bg-white shadow-sm border-r border-gray-200 flex flex-col z-40">
         {/* Logo/Title */}
         <div className="px-6 py-4 border-b border-gray-200">
           <h1 className="text-lg font-semibold text-gray-900">AI Bricks Analyst</h1>
@@ -104,35 +104,10 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
         )}
       </aside>
       
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">
-              {navigationItems.find(item => 
-                location.pathname === item.href || 
-                (item.href === AppRoutes.projects && location.pathname.startsWith('/projects'))
-              )?.name || 'Page'}
-            </h2>
-            <div className="text-sm text-gray-600 flex items-center gap-2">
-              {isAuthenticated ? (
-                <>
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  Connecté
-                </>
-              ) : (
-                <>
-                  <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                  Non connecté
-                </>
-              )}
-            </div>
-          </div>
-        </header>
-        
-        {/* Page Content */}
-        <main className="flex-1 px-6 py-8 overflow-auto">
+      {/* Main Content Area - Offset by sidebar width */}
+      <div className="ml-64 min-h-screen">
+        {/* Page Content - Sans header */}
+        <main className="px-6 py-8 overflow-auto">
           {children}
         </main>
       </div>

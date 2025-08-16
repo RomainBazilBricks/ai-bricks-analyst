@@ -12,7 +12,7 @@ import {
   missing_documents,
   vigilance_points,
   conversations,
-  project_analysis_workflow,
+  project_analysis_progress,
   consolidated_data
 } from '@/db/schema';
 import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
@@ -96,18 +96,32 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     if (projectData.fileUrls && projectData.fileUrls.length > 0) {
       const documentsToInsert = [];
       
+      // Récupérer les hash existants pour cette session pour éviter les doublons
+      const existingDocuments = await db
+        .select({ hash: documents.hash })
+        .from(documents)
+        .where(eq(documents.sessionId, newSession[0].id));
+      
+      const existingHashes = new Set(existingDocuments.map(doc => doc.hash));
+      
       for (let index = 0; index < projectData.fileUrls.length; index++) {
         const bubbleUrl = projectData.fileUrls[index];
         
         try {
           console.log(`📥 Conversion S3 du document ${index + 1}/${projectData.fileUrls.length}: ${bubbleUrl}`);
           
-          // Convertir l'URL Bubble vers S3
+          // Convertir l'URL Bubble vers S3 en préservant le nom original
           const s3Result = await uploadFileFromUrl(
             bubbleUrl,
-            projectData.projectUniqueId,
-            `Document_${index + 1}`
+            projectData.projectUniqueId
+            // Ne pas passer de nom de fichier pour laisser la fonction extraire le nom original
           );
+          
+          // Vérifier si ce document existe déjà (par hash)
+          if (existingHashes.has(s3Result.hash)) {
+            console.log(`⚠️ Document ${index + 1} ignoré (déjà existant): ${s3Result.fileName}`);
+            continue;
+          }
           
           documentsToInsert.push({
             sessionId: newSession[0].id,
@@ -120,22 +134,32 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
             uploadedAt: new Date(),
           });
           
+          // Ajouter le hash à notre set pour éviter les doublons dans cette même requête
+          existingHashes.add(s3Result.hash);
+          
           console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
           
         } catch (error) {
           console.error(`❌ Erreur conversion S3 document ${index + 1}:`, error);
           
           // En cas d'erreur, stocker l'URL Bubble avec statut ERROR
-          documentsToInsert.push({
-            sessionId: newSession[0].id,
-            fileName: `Document_${index + 1}_ERROR`,
-            url: bubbleUrl, // URL Bubble en fallback
-            hash: `error-${Date.now()}-${index}`,
-            mimeType: 'application/pdf',
-            size: 0,
-            status: 'ERROR' as const,
-            uploadedAt: new Date(),
-          });
+          const errorHash = `error-${Date.now()}-${index}`;
+          
+          // Vérifier si ce hash d'erreur existe déjà (peu probable mais sécurise)
+          if (!existingHashes.has(errorHash)) {
+            documentsToInsert.push({
+              sessionId: newSession[0].id,
+              fileName: `Document_${index + 1}_ERROR`,
+              url: bubbleUrl, // URL Bubble en fallback
+              hash: errorHash,
+              mimeType: 'application/pdf',
+              size: 0,
+              status: 'ERROR' as const,
+              uploadedAt: new Date(),
+            });
+            
+            existingHashes.add(errorHash);
+          }
         }
       }
 
@@ -148,8 +172,10 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
         const successCount = insertedDocuments.filter(doc => doc.status === 'PROCESSED').length;
         const errorCount = insertedDocuments.filter(doc => doc.status === 'ERROR').length;
         
-        console.log(`📎 ${insertedDocuments.length} fichier(s) ajouté(s) à la session ${newSession[0].id}`);
+        console.log(`📎 ${insertedDocuments.length} nouveau(x) fichier(s) ajouté(s) à la session ${newSession[0].id}`);
         console.log(`✅ ${successCount} converti(s) vers S3, ❌ ${errorCount} en erreur`);
+      } else {
+        console.log(`ℹ️ Aucun nouveau document à insérer (tous les documents sont des doublons ou erreurs)`);
       }
     }
 
@@ -697,6 +723,380 @@ export const getConsolidatedData = async (req: Request, res: Response): Promise<
 };
 
 /**
+ * Récupère les documents manquants d'un projet
+ * @route GET /api/projects/:projectUniqueId/missing-documents
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {MissingDocument[]} Documents manquants du projet
+ */
+export const getMissingDocuments = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id, projectName: projects.projectName })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer les documents manquants
+    const missingDocs = await db
+      .select()
+      .from(missing_documents)
+      .where(eq(missing_documents.projectId, project[0].id))
+      .orderBy(asc(missing_documents.createdAt));
+
+    res.json(missingDocs);
+    
+  } catch (error) {
+    console.error('Error fetching missing documents:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_MISSING_DOCUMENTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Met à jour le statut d'un document manquant
+ * @route PATCH /api/projects/:projectUniqueId/missing-documents/:documentId
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} documentId - Identifiant du document manquant
+ * @body {status: 'resolved' | 'irrelevant' | 'pending', whyStatus?: string}
+ * @returns {MissingDocument} Document manquant mis à jour
+ */
+export const updateMissingDocumentStatus = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, documentId } = req.params;
+    const { status, whyStatus } = req.body;
+
+    // Validation des paramètres
+    if (!status || !['resolved', 'irrelevant', 'pending'].includes(status)) {
+      return res.status(400).json({
+        error: 'Status must be one of: resolved, irrelevant, pending',
+        code: 'INVALID_STATUS'
+      });
+    }
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que le document manquant existe et appartient au projet
+    const existingDoc = await db
+      .select()
+      .from(missing_documents)
+      .where(and(
+        eq(missing_documents.id, documentId),
+        eq(missing_documents.projectId, project[0].id)
+      ))
+      .limit(1);
+
+    if (existingDoc.length === 0) {
+      return res.status(404).json({
+        error: 'Missing document not found',
+        code: 'MISSING_DOCUMENT_NOT_FOUND'
+      });
+    }
+
+    // Mettre à jour le statut
+    const updatedDoc = await db
+      .update(missing_documents)
+      .set({
+        status: status as 'resolved' | 'irrelevant' | 'pending',
+        whyStatus: whyStatus || null,
+        updatedAt: new Date()
+      })
+      .where(eq(missing_documents.id, documentId))
+      .returning();
+
+    console.log(`📋 Document manquant ${documentId} mis à jour: ${status}`);
+
+    res.json(updatedDoc[0]);
+    
+  } catch (error) {
+    console.error('Error updating missing document status:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'UPDATE_MISSING_DOCUMENT_ERROR'
+    });
+  }
+};
+
+/**
+ * Récupère les points de vigilance d'un projet
+ * @route GET /api/projects/:projectUniqueId/vigilance-points
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {VigilancePointResponse[]} Liste des points de vigilance
+ */
+export const getVigilancePoints = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer les points de vigilance
+    const vigilancePoints = await db
+      .select()
+      .from(vigilance_points)
+      .where(eq(vigilance_points.projectId, project[0].id))
+      .orderBy(desc(vigilance_points.createdAt));
+
+    console.log(`📋 Points de vigilance récupérés pour le projet ${projectUniqueId}: ${vigilancePoints.length} points`);
+
+    res.json(vigilancePoints);
+    
+  } catch (error) {
+    console.error('Error fetching vigilance points:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_VIGILANCE_POINTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Met à jour le statut d'un point de vigilance
+ * @route PATCH /api/projects/:projectUniqueId/vigilance-points/:pointId
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} pointId - Identifiant du point de vigilance
+ * @body {status: 'resolved' | 'irrelevant' | 'pending', whyStatus?: string}
+ * @returns {VigilancePoint} Point de vigilance mis à jour
+ */
+export const updateVigilancePointStatus = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, pointId } = req.params;
+    const { status, whyStatus } = req.body;
+
+    // Validation des paramètres
+    if (!status || !['resolved', 'irrelevant', 'pending'].includes(status)) {
+      return res.status(400).json({
+        error: 'Status must be one of: resolved, irrelevant, pending',
+        code: 'INVALID_STATUS'
+      });
+    }
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que le point de vigilance existe et appartient au projet
+    const existingPoint = await db
+      .select()
+      .from(vigilance_points)
+      .where(and(
+        eq(vigilance_points.id, pointId),
+        eq(vigilance_points.projectId, project[0].id)
+      ))
+      .limit(1);
+
+    if (existingPoint.length === 0) {
+      return res.status(404).json({
+        error: 'Vigilance point not found',
+        code: 'VIGILANCE_POINT_NOT_FOUND'
+      });
+    }
+
+    // Mettre à jour le statut
+    const updatedPoint = await db
+      .update(vigilance_points)
+      .set({
+        status: status as 'resolved' | 'irrelevant' | 'pending',
+        whyStatus: whyStatus || null,
+        updatedAt: new Date()
+      })
+      .where(eq(vigilance_points.id, pointId))
+      .returning();
+
+    console.log(`📋 Point de vigilance ${pointId} mis à jour: ${status}`);
+
+    res.json(updatedPoint[0]);
+    
+  } catch (error) {
+    console.error('Error updating vigilance point status:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'UPDATE_VIGILANCE_POINT_ERROR'
+    });
+  }
+};
+
+/**
+ * Récupère les conversations d'un projet
+ * @route GET /api/projects/:projectUniqueId/conversations
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {ConversationMessage[]} Liste des conversations
+ */
+export const getProjectConversations = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer toutes les conversations via les sessions
+    const projectConversations = await db
+      .select({
+        id: conversations.id,
+        sessionId: conversations.sessionId,
+        sessionDate: conversations.sessionDate,
+        sender: conversations.sender,
+        message: conversations.message,
+        attachments: conversations.attachments,
+        createdAt: conversations.createdAt,
+      })
+      .from(conversations)
+      .leftJoin(sessions, eq(conversations.sessionId, sessions.id))
+      .where(eq(sessions.projectId, project[0].id))
+      .orderBy(desc(conversations.createdAt));
+
+    console.log(`📋 Conversations récupérées pour le projet ${projectUniqueId}: ${projectConversations.length} messages`);
+
+    res.json(projectConversations);
+    
+  } catch (error) {
+    console.error('Error fetching project conversations:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_CONVERSATIONS_ERROR'
+    });
+  }
+};
+
+/**
+ * Crée ou met à jour un draft de message pour un projet
+ * @route POST /api/projects/:projectUniqueId/conversations/draft
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @body {message: string, sender?: string}
+ * @returns {ConversationMessage} Draft de message créé/mis à jour
+ */
+export const createOrUpdateDraft = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const { message, sender = 'L\'équipe d\'analyse' } = req.body;
+
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({
+        error: 'Message is required and must be a string',
+        code: 'INVALID_MESSAGE'
+      });
+    }
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier s'il existe une session pour ce projet
+    let projectSession = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.projectId, project[0].id))
+      .limit(1);
+
+    if (projectSession.length === 0) {
+      // Créer une session automatiquement
+      const newSession = await db
+        .insert(sessions)
+        .values({
+          projectId: project[0].id,
+          name: `Session - ${new Date().toLocaleDateString('fr-FR')}`,
+          description: 'Session créée pour les messages du projet',
+          status: 'open',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      projectSession = newSession;
+    }
+
+    // Créer le message dans la conversation
+    const newMessage = await db
+      .insert(conversations)
+      .values({
+        sessionId: projectSession[0].id,
+        sessionDate: new Date(),
+        sender: sender,
+        message: message,
+        attachments: [],
+        createdAt: new Date(),
+      })
+      .returning();
+
+    console.log(`📋 Draft de message créé pour le projet ${projectUniqueId}`);
+
+    res.status(201).json(newMessage[0]);
+    
+  } catch (error) {
+    console.error('Error creating draft message:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'CREATE_DRAFT_ERROR'
+    });
+  }
+};
+
+/**
  * Supprime un projet et toutes ses données associées
  * @route POST /api/projects/delete
  * @param {DeleteProjectInput} req.body - Données de suppression du projet
@@ -788,8 +1188,8 @@ export const deleteProject = async (req: Request, res: Response): Promise<any> =
 
     // Supprimer le workflow d'analyse
     const workflowDeleted = await db
-      .delete(project_analysis_workflow)
-      .where(eq(project_analysis_workflow.projectId, projectId));
+      .delete(project_analysis_progress)
+      .where(eq(project_analysis_progress.projectId, projectId));
     
     deletedItems.workflow = workflowDeleted.rowCount || 0;
 
@@ -815,6 +1215,169 @@ export const deleteProject = async (req: Request, res: Response): Promise<any> =
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'DELETE_PROJECT_ERROR'
+    });
+  }
+};
+
+/**
+ * Supprime un document d'un projet
+ * @route POST /api/projects/:projectUniqueId/documents/:documentId/delete
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} documentId - Identifiant du document à supprimer
+ * @returns {object} Résultat de la suppression
+ */
+export const deleteDocument = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, documentId } = req.params;
+
+    console.log(`🗑️ Tentative de suppression du document ${documentId} du projet ${projectUniqueId}`);
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que le document existe et appartient au projet
+    const document = await db
+      .select({ 
+        id: documents.id, 
+        fileName: documents.fileName,
+        sessionId: documents.sessionId 
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(
+        and(
+          eq(documents.id, documentId),
+          eq(sessions.projectId, project[0].id)
+        )
+      )
+      .limit(1);
+
+    if (document.length === 0) {
+      return res.status(404).json({ 
+        error: 'Document not found in this project',
+        code: 'DOCUMENT_NOT_FOUND'
+      });
+    }
+
+    // Supprimer le document de la base de données
+    const deletedDocument = await db
+      .delete(documents)
+      .where(eq(documents.id, documentId))
+      .returning();
+
+    if (deletedDocument.length === 0) {
+      return res.status(500).json({ 
+        error: 'Failed to delete document',
+        code: 'DELETE_DOCUMENT_ERROR'
+      });
+    }
+
+    console.log(`✅ Document ${document[0].fileName} supprimé avec succès`);
+
+    res.json({
+      success: true,
+      message: `Document ${document[0].fileName} supprimé avec succès`,
+      deletedDocument: {
+        id: documentId,
+        fileName: document[0].fileName
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'DELETE_DOCUMENT_ERROR'
+    });
+  }
+};
+
+/**
+ * Supprime tous les documents d'un projet
+ * @route POST /api/projects/:projectUniqueId/documents/delete-all
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {object} Résultat de la suppression
+ */
+export const deleteAllDocuments = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    console.log(`🗑️ Tentative de suppression de tous les documents du projet ${projectUniqueId}`);
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer tous les documents du projet via les sessions
+    const projectDocuments = await db
+      .select({ 
+        id: documents.id, 
+        fileName: documents.fileName 
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(eq(sessions.projectId, project[0].id));
+
+    if (projectDocuments.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Aucun document à supprimer',
+        deletedCount: 0,
+        deletedDocuments: []
+      });
+    }
+
+    // Supprimer tous les documents du projet
+    const documentIds = projectDocuments.map(doc => doc.id);
+    
+    // Supprimer les documents un par un car la jointure ne fonctionne pas avec DELETE
+    const deletedDocuments = [];
+    for (const doc of projectDocuments) {
+      const deleted = await db
+        .delete(documents)
+        .where(eq(documents.id, doc.id))
+        .returning();
+      deletedDocuments.push(...deleted);
+    }
+
+    console.log(`✅ ${deletedDocuments.length} documents supprimés du projet ${projectUniqueId}`);
+
+    res.json({
+      success: true,
+      message: `${deletedDocuments.length} documents supprimés avec succès`,
+      deletedCount: deletedDocuments.length,
+      deletedDocuments: projectDocuments.map(doc => ({
+        id: doc.id,
+        fileName: doc.fileName
+      }))
+    });
+    
+  } catch (error) {
+    console.error('Error deleting all documents:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'DELETE_ALL_DOCUMENTS_ERROR'
     });
   }
 }; 

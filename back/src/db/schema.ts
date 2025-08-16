@@ -37,6 +37,13 @@ export enum DocumentStatus {
   IRRELEVANT = 'irrelevant',
 }
 
+export enum ProjectTypology {
+  MARCHAND_DE_BIEN = 'marchand_de_bien',
+  PROJET_LOCATIF = 'projet_locatif',
+  PROJET_EXPLOITATION = 'projet_exploitation',
+  PROMOTION_IMMOBILIERE = 'promotion_immobiliere',
+}
+
 export enum SessionStatus {
   OPEN = 'open',
   CLOSED = 'closed',
@@ -47,6 +54,7 @@ export const sessionStatusEnum = pgEnum('session_status', ['open', 'closed']);
 export const fileStatusEnum = pgEnum('file_status', ['UPLOADED', 'PROCESSED', 'ERROR']);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'resolved', 'irrelevant']);
 export const riskLevelEnum = pgEnum('risk_level', ['low', 'medium', 'high']);
+export const projectTypologyEnum = pgEnum('project_typology', ['marchand_de_bien', 'projet_locatif', 'projet_exploitation', 'promotion_immobiliere']);
 
 // Users Table - Represents administrators
 export const users = pgTable('users', {
@@ -62,6 +70,7 @@ export const projects = pgTable('projects', {
   projectUniqueId: varchar('project_unique_id', { length: 256 }).notNull().unique(),
   projectName: varchar('project_name', { length: 512 }).notNull(),
   description: text('description').notNull(), // Project overview
+  typologie: projectTypologyEnum('typologie'), // Project typology (optional)
   budgetTotal: decimal('budget_total', { precision: 15, scale: 2 }).notNull(), // Total budget
   estimatedRoi: decimal('estimated_roi', { precision: 5, scale: 2 }).notNull(), // ROI percentage
   startDate: timestamp('start_date').notNull(), // Start date
@@ -175,8 +184,8 @@ export const analysis_steps = pgTable('analysis_steps', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Project Analysis Workflow - Tracks analysis steps for each project
-export const project_analysis_workflow = pgTable('project_analysis_workflow', {
+// Project Analysis Progress - Tracks analysis progress for each project (only stores progress, not step definitions)
+export const project_analysis_progress = pgTable('project_analysis_progress', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   stepId: integer('step_id').references(() => analysis_steps.id, { onDelete: 'cascade' }).notNull(),
@@ -187,7 +196,10 @@ export const project_analysis_workflow = pgTable('project_analysis_workflow', {
   completedAt: timestamp('completed_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // Contrainte unique pour éviter les doublons projet/étape
+  uniqueProjectStep: unique().on(table.projectId, table.stepId),
+}));
 
 // AI Credentials Table - Stores credentials for AI platforms
 export const ai_credentials = pgTable('ai_credentials', {

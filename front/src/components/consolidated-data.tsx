@@ -102,145 +102,157 @@ export const ConsolidatedData = ({ projectUniqueId }: ConsolidatedDataProps) => 
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Données consolidées
-        </CardTitle>
-        <CardDescription>
-          Données extraites et structurées par l'IA lors de l'analyse du projet
-        </CardDescription>
+    <Card className="border-0 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg font-medium text-gray-900">
+            <TrendingUp className="h-4 w-4 text-blue-600" />
+            Données consolidées
+          </CardTitle>
+          <div className="text-xs text-gray-500">
+            {new Date(consolidatedData.updatedAt).toLocaleDateString('fr-FR')}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Données Financières */}
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-2 font-semibold text-lg">
-            <DollarSign className="h-5 w-5 text-green-600" />
-            Données Financières
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Prix d'acquisition</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.financialAcquisitionPrice)}</p>
+      
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Colonne gauche */}
+          <div className="space-y-3">
+            {/* Données Financières */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-md p-3 border border-green-100">
+              <div className="flex items-center gap-1.5 mb-2">
+                <DollarSign className="h-3.5 w-3.5 text-green-600" />
+                <h3 className="text-sm font-medium text-gray-800">Financier</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Acquisition</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialAcquisitionPrice)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Travaux</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialWorksCost)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Revente prévue</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialPlannedResalePrice)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Apport</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialPersonalContribution)}</p>
+                </div>
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Coût travaux</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.financialWorksCost)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Prix revente prévu</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.financialPlannedResalePrice)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Apport personnel</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.financialPersonalContribution)}</p>
-            </div>
-          </div>
-        </div>
 
-        {/* Données du Bien */}
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-2 font-semibold text-lg">
-            <Home className="h-5 w-5 text-blue-600" />
-            Données du Bien
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Surface habitable</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.propertyLivingArea, " m²")}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Prix marché réf.</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.propertyMarketReferencePrice)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Loyers mensuels HT</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.propertyMonthlyRentExcludingTax)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Logements pré-vendus</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.propertyPresoldUnits)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Logements total</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.propertyTotalUnits)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Taux pré-commercialisation</p>
-              <p className="text-lg font-semibold">{formatPercentage(consolidatedData.propertyPreMarketingRate)}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Données Porteur */}
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-2 font-semibold text-lg">
-            <User className="h-5 w-5 text-purple-600" />
-            Données Porteur
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Expérience</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.carrierExperienceYears, " ans")}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Opérations réussies</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.carrierSuccessfulOperations)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Litiges actifs</p>
-              <div className="flex items-center gap-2">
-                {getBooleanIcon(consolidatedData.carrierHasActiveLitigation)}
-                <p className="text-lg font-semibold">{formatBoolean(consolidatedData.carrierHasActiveLitigation)}</p>
+            {/* Données du Bien */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-md p-3 border border-blue-100">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Home className="h-3.5 w-3.5 text-blue-600" />
+                <h3 className="text-sm font-medium text-gray-800">Bien immobilier</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Surface</p>
+                  <p className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.propertyLivingArea, " m²")}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Prix marché</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.propertyMarketReferencePrice)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Loyers HT</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.propertyMonthlyRentExcludingTax)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Pré-commerc.</p>
+                  <p className="text-sm font-medium text-gray-900">{formatPercentage(consolidatedData.propertyPreMarketingRate)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Pré-vendus</p>
+                  <p className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.propertyPresoldUnits)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Total logements</p>
+                  <p className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.propertyTotalUnits)}</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Société Porteuse */}
-        <div className="space-y-3">
-          <h3 className="flex items-center gap-2 font-semibold text-lg">
-            <Building2 className="h-5 w-5 text-orange-600" />
-            Société Porteuse
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Années d'existence</p>
-              <p className="text-lg font-semibold">{formatNumber(consolidatedData.companyYearsOfExistence, " ans")}</p>
+          {/* Colonne droite */}
+          <div className="space-y-3">
+            {/* Données Porteur */}
+            <div className="bg-gradient-to-r from-purple-50 to-violet-50 rounded-md p-3 border border-purple-100">
+              <div className="flex items-center gap-1.5 mb-2">
+                <User className="h-3.5 w-3.5 text-purple-600" />
+                <h3 className="text-sm font-medium text-gray-800">Porteur</h3>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Expérience</span>
+                  <span className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.carrierExperienceYears, " ans")}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Opérations réussies</span>
+                  <span className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.carrierSuccessfulOperations)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Litiges actifs</span>
+                  <div className="flex items-center gap-1">
+                    {getBooleanIcon(consolidatedData.carrierHasActiveLitigation)}
+                    <span className="text-sm font-medium text-gray-900">{formatBoolean(consolidatedData.carrierHasActiveLitigation)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Résultat net N-1</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.companyNetResultYear1)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Résultat net N-2</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.companyNetResultYear2)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Résultat net N-3</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.companyNetResultYear3)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Endettement total</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.companyTotalDebt)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Capitaux propres</p>
-              <p className="text-lg font-semibold">{formatCurrency(consolidatedData.companyEquity)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-gray-600">Ratio d'endettement</p>
-              <p className="text-lg font-semibold">{formatPercentage(consolidatedData.companyDebtRatio)}</p>
+
+            {/* Société Porteuse */}
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-md p-3 border border-orange-100">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Building2 className="h-3.5 w-3.5 text-orange-600" />
+                <h3 className="text-sm font-medium text-gray-800">Société</h3>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Existence</span>
+                  <span className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.companyYearsOfExistence, " ans")}</span>
+                </div>
+                
+                {/* Résultats compacts */}
+                <div className="border-t border-orange-200 pt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Résultat N-1</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.companyNetResultYear1)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Résultat N-2</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.companyNetResultYear2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Résultat N-3</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.companyNetResultYear3)}</span>
+                  </div>
+                </div>
+
+                {/* Bilan compact */}
+                <div className="border-t border-orange-200 pt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Endettement</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.companyTotalDebt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Capitaux propres</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.companyEquity)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Ratio endettement</span>
+                    <span className="text-sm font-medium text-gray-900">{formatPercentage(consolidatedData.companyDebtRatio)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Métadonnées */}
-        <div className="pt-4 border-t border-gray-200">
-          <p className="text-xs text-gray-500">
-            Dernière mise à jour : {new Date(consolidatedData.updatedAt).toLocaleString('fr-FR')}
-          </p>
         </div>
       </CardContent>
     </Card>

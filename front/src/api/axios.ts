@@ -68,3 +68,10 @@ export const axiosGet = <_, ResponseData>(
   params: any,
   timeout = 60000
 ) => axiosRequest<ResponseData>({ method: "GET", url, params, timeout });
+
+export const axiosPatch = <RequestBody, ResponseData>(
+  url: string,
+  body: RequestBody,
+  timeout = 60000
+): Promise<ResponseData> =>
+  axiosRequest<ResponseData>({ method: "PATCH", url, data: body, timeout });

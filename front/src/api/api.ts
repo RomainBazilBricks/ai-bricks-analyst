@@ -5,7 +5,7 @@ import {
     type UseQueryOptions,
     type UseMutationOptions,
   } from "@tanstack/react-query";
-  import { axiosGet, axiosPost } from "@/api/axios";
+  import { axiosGet, axiosPost, axiosPatch } from "@/api/axios";
   
   interface FetcherType<PARAMS = unknown, RESPONSE = unknown> {
     key: QueryKey | string;
@@ -35,16 +35,25 @@ import {
     RESPONSE = unknown,
     ERROR = unknown
   >(
-    path: string,
-    opts: Partial<UseMutationOptions<RESPONSE, ERROR, PARAMS>> = {}
+    path: string | ((data: PARAMS) => string),
+    opts: Partial<UseMutationOptions<RESPONSE, ERROR, PARAMS>> & { method?: 'POST' | 'PATCH' } = {}
   ) => {
+    const { method = 'POST', ...restOpts } = opts;
+    
     const func = async (data: PARAMS): Promise<RESPONSE> => {
-      const returnedItem = await axiosPost<PARAMS, RESPONSE>(path, data);
-      return returnedItem as any;
+      const url = typeof path === 'function' ? path(data) : path;
+      
+      if (method === 'PATCH') {
+        const returnedItem = await axiosPatch<PARAMS, RESPONSE>(url, data);
+        return returnedItem as any;
+      } else {
+        const returnedItem = await axiosPost<PARAMS, RESPONSE>(url, data);
+        return returnedItem as any;
+      }
     };
   
     return useMutation<RESPONSE, ERROR, PARAMS>({
-      ...opts,
+      ...restOpts,
       mutationFn: func,
     });
   };

@@ -41,7 +41,16 @@ export async function uploadFileFromUrl(
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
     
     // Générer le nom de fichier s'il n'est pas fourni
-    const finalFileName = fileName || extractFileNameFromUrl(fileUrl) || `file-${Date.now()}`;
+    const extractedFileName = extractFileNameFromUrl(fileUrl);
+    const headerFileName = extractFileNameFromHeaders(response.headers);
+    const finalFileName = fileName || extractedFileName || headerFileName || `document-${Date.now()}`;
+    
+    console.log(`🔍 DEBUG uploadFileFromUrl:`);
+    console.log(`  - fileUrl: ${fileUrl}`);
+    console.log(`  - fileName param: ${fileName}`);
+    console.log(`  - extractedFileName: ${extractedFileName}`);
+    console.log(`  - headerFileName: ${headerFileName}`);
+    console.log(`  - finalFileName: ${finalFileName}`);
     
     // Calculer le hash du fichier pour détecter les doublons
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
@@ -100,7 +109,54 @@ function extractFileNameFromUrl(url: string): string | null {
     const urlObj = new URL(url);
     const pathname = urlObj.pathname;
     const fileName = pathname.split('/').pop();
-    return fileName && fileName.length > 0 ? fileName : null;
+    
+    if (!fileName || fileName.length === 0) {
+      return null;
+    }
+    
+    // Décoder l'URL pour gérer les caractères spéciaux
+    const decodedFileName = decodeURIComponent(fileName);
+    
+    // Nettoyer le nom de fichier (supprimer les caractères non autorisés)
+    const cleanFileName = decodedFileName.replace(/[<>:"/\\|?*]/g, '_');
+    
+    return cleanFileName;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extrait le nom de fichier depuis les headers HTTP (Content-Disposition)
+ */
+function extractFileNameFromHeaders(headers: Headers): string | null {
+  try {
+    const contentDisposition = headers.get('content-disposition');
+    if (!contentDisposition) {
+      return null;
+    }
+    
+    // Chercher filename= ou filename*= dans le header
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (!filenameMatch || !filenameMatch[1]) {
+      return null;
+    }
+    
+    let fileName = filenameMatch[1].trim();
+    
+    // Supprimer les guillemets si présents
+    if ((fileName.startsWith('"') && fileName.endsWith('"')) || 
+        (fileName.startsWith("'") && fileName.endsWith("'"))) {
+      fileName = fileName.slice(1, -1);
+    }
+    
+    // Décoder si nécessaire
+    const decodedFileName = decodeURIComponent(fileName);
+    
+    // Nettoyer le nom de fichier
+    const cleanFileName = decodedFileName.replace(/[<>:"/\\|?*]/g, '_');
+    
+    return cleanFileName;
   } catch {
     return null;
   }

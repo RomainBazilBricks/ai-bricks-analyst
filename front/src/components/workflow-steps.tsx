@@ -149,6 +149,11 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
             taskId: response.task_id,
           });
           console.log('✅ Conversation AI sauvegardée avec succès');
+          
+          // ✅ INVALIDER LE CACHE DU WORKFLOW POUR METTRE À JOUR L'AFFICHAGE
+          queryClient.invalidateQueries({ queryKey: ["workflow", "status", projectUniqueId] });
+          console.log('🔄 Cache du workflow invalidé pour mise à jour de l\'affichage');
+          
         } catch (saveError) {
           console.error('❌ Erreur lors de la sauvegarde de la conversation:', saveError);
           // Ne pas faire échouer le processus principal si la sauvegarde échoue
@@ -465,34 +470,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                           </details>
                         )}
                         
-                        {/* Contenu de l'étape si disponible */}
-                        {step.content && (
-                          <div className="mt-3 p-3 bg-white rounded border">
-                            <div className="flex items-center justify-between mb-2">
-                              <h5 className="font-medium text-sm text-gray-700">Résultat de l'analyse</h5>
-                              {step.manusConversationUrl && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                >
-                                  <a
-                                    href={step.manusConversationUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-xs"
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                    Conversation
-                                  </a>
-                                </Button>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-700 whitespace-pre-wrap">
-                              {step.content}
-                            </div>
-                          </div>
-                        )}
+
 
                         {/* Résultat de l'IA si disponible */}
                         {(() => {

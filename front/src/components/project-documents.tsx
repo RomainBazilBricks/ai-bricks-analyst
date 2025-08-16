@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useGetProjectDocuments } from "@/api/projects";
+import { useGetProjectDocuments, useDeleteDocument, useDeleteAllDocuments } from "@/api/projects";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { queryClient } from "@/api/query-config";
 import { 
   FileText, 
   ExternalLink, 
@@ -14,7 +15,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
 import type { DocumentResponse } from "@shared/types/projects";
 
@@ -95,6 +97,8 @@ const getStatusText = (status: string): string => {
 
 export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqueId }) => {
   const [expandedDocument, setExpandedDocument] = useState<string | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
 
   const {
     data: documents,
@@ -121,6 +125,59 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
   const toggleDocumentDetails = (documentId: string) => {
     setExpandedDocument(expandedDocument === documentId ? null : documentId);
+  };
+
+  const handleDeleteDocument = (documentId: string) => {
+    setDocumentToDelete(documentId);
+  };
+
+  // Hook de suppression de document
+  const { mutateAsync: deleteDocument, isPending: isDeleting } = useDeleteDocument(projectUniqueId, documentToDelete || '', {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", projectUniqueId, "documents"] });
+      setDocumentToDelete(null);
+    },
+    onError: (error: any) => {
+      console.error('Erreur lors de la suppression:', error);
+      // Ici on pourrait ajouter un toast d'erreur
+    }
+  });
+
+  // Hook de suppression de tous les documents
+  const { mutateAsync: deleteAllDocuments, isPending: isDeletingAll } = useDeleteAllDocuments(projectUniqueId, {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", projectUniqueId, "documents"] });
+      setShowDeleteAllConfirm(false);
+    },
+    onError: (error: any) => {
+      console.error('Erreur lors de la suppression de tous les documents:', error);
+    }
+  });
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete) return;
+
+    try {
+      await deleteDocument();
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+    }
+  };
+
+  const cancelDeleteDocument = () => {
+    setDocumentToDelete(null);
+  };
+
+  const confirmDeleteAllDocuments = async () => {
+    try {
+      await deleteAllDocuments();
+    } catch (error) {
+      console.error('Erreur lors de la suppression de tous les documents:', error);
+    }
+  };
+
+  const cancelDeleteAllDocuments = () => {
+    setShowDeleteAllConfirm(false);
   };
 
   if (isLoading) {
@@ -212,12 +269,20 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
             {documents.length}
           </Badge>
         </CardTitle>
-        <CardDescription>
-          {documents.length === 1 
-            ? "1 document transmis pour ce projet" 
-            : `${documents.length} documents transmis pour ce projet`
-          }
-        </CardDescription>
+        {documents.length > 0 && (
+          <div className="flex justify-end mt-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDeleteAllConfirm(true)}
+              className="flex items-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer tous les documents
+            </Button>
+          </div>
+        )}
+
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -293,22 +358,89 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                     <Download className="h-3 w-3" />
                     Télécharger
                   </Button>
+                  {documentToDelete === document.id ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={confirmDeleteDocument}
+                        disabled={isDeleting}
+                        className="h-8 w-8 p-0"
+                      >
+                        {isDeleting ? (
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3 w-3" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={cancelDeleteDocument}
+                        disabled={isDeleting}
+                        className="h-8 px-2 text-xs"
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDeleteDocument(document.id)}
+                      className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Actions globales */}
-        <div className="mt-6 pt-4 border-t flex justify-between items-center">
-          <p className="text-sm text-gray-500">
-            Total: {formatFileSize(documents.reduce((total, doc) => total + doc.size, 0))}
-          </p>
-          <Button variant="outline" onClick={() => refetch()} className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Actualiser
-          </Button>
-        </div>
+        {/* Modal de confirmation pour supprimer tous les documents */}
+        {showDeleteAllConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Confirmer la suppression
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Êtes-vous sûr de vouloir supprimer <strong>tous les documents</strong> de ce projet ? Cette action est irréversible.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={cancelDeleteAllDocuments}
+                  disabled={isDeletingAll}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmDeleteAllDocuments}
+                  disabled={isDeletingAll}
+                  className="flex items-center gap-2"
+                >
+                  {isDeletingAll ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Suppression...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Supprimer tout
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </CardContent>
     </Card>
   );

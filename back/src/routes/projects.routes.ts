@@ -8,7 +8,15 @@ import {
   getProjectDocumentsListPage,
   downloadDocument,
   getConsolidatedData,
-  deleteProject
+  getMissingDocuments,
+  updateMissingDocumentStatus,
+  getVigilancePoints,
+  updateVigilancePointStatus,
+  getProjectConversations,
+  createOrUpdateDraft,
+  deleteProject,
+  deleteDocument,
+  deleteAllDocuments
 } from '@/controllers/projects.controller';
 
 const router = Router();
@@ -72,6 +80,59 @@ router.get('/:projectUniqueId/documents/:documentId/download', downloadDocument)
  * @description Récupère les données consolidées d'un projet
  */
 router.get('/:projectUniqueId/consolidated-data', getConsolidatedData);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/missing-documents
+ * @description Récupère les documents manquants d'un projet
+ */
+router.get('/:projectUniqueId/missing-documents', getMissingDocuments);
+
+/**
+ * @route PATCH /api/projects/:projectUniqueId/missing-documents/:documentId
+ * @description Met à jour le statut d'un document manquant
+ */
+router.patch('/:projectUniqueId/missing-documents/:documentId', updateMissingDocumentStatus);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/vigilance-points
+ * @description Récupère les points de vigilance d'un projet
+ */
+router.get('/:projectUniqueId/vigilance-points', getVigilancePoints);
+
+/**
+ * @route PATCH /api/projects/:projectUniqueId/vigilance-points/:pointId
+ * @description Met à jour le statut d'un point de vigilance
+ */
+router.patch('/:projectUniqueId/vigilance-points/:pointId', updateVigilancePointStatus);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/conversations
+ * @description Récupère les conversations d'un projet
+ */
+router.get('/:projectUniqueId/conversations', getProjectConversations);
+
+/**
+ * @route POST /api/projects/:projectUniqueId/conversations/draft
+ * @description Crée ou met à jour un draft de message
+ */
+router.post('/:projectUniqueId/conversations/draft', createOrUpdateDraft);
+
+/**
+ * @route POST /api/projects/:projectUniqueId/documents/:documentId/delete
+ * @description Supprime un document d'un projet
+ * @param projectUniqueId - Identifiant unique du projet
+ * @param documentId - Identifiant du document à supprimer
+ * @returns {object} Résultat de la suppression
+ */
+router.post('/:projectUniqueId/documents/:documentId/delete', deleteDocument);
+
+/**
+ * @route POST /api/projects/:projectUniqueId/documents/delete-all
+ * @description Supprime tous les documents d'un projet
+ * @param projectUniqueId - Identifiant unique du projet
+ * @returns {object} Résultat de la suppression
+ */
+router.post('/:projectUniqueId/documents/delete-all', deleteAllDocuments);
 
 /**
  * @route POST /api/projects/delete

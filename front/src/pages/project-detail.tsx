@@ -1,10 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGetProjectById, useDeleteProject } from "@/api/projects";
 import { useSendMessageToTool } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
 import { ProjectDocuments } from "@/components/project-documents";
 import { ConsolidatedData } from "@/components/consolidated-data";
+import { MissingDocuments } from "@/components/missing-documents";
+import { VigilancePoints } from "@/components/vigilance-points";
+import { ProjectConversations } from "@/components/project-conversations";
 
 import { useGetWorkflowStatus } from "@/api/workflow";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -23,9 +26,6 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   ArrowLeft, 
-  Calendar, 
-  DollarSign, 
-  TrendingUp, 
   Building, 
   MessageSquare,
   Send,
@@ -45,29 +45,9 @@ const formatDate = (dateString: string) => {
   });
 };
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR'
-  }).format(amount);
-};
 
-// Fonctions utilitaires pour détecter les valeurs vides/par défaut
-const hasValidFinancialData = (project: any) => {
-  return project.budgetTotal > 0 || project.estimatedRoi > 0;
-};
 
-const hasValidTimelineData = (project: any) => {
-  const today = new Date();
-  const startDate = new Date(project.startDate);
-  const fundingDate = new Date(project.fundingExpectedDate);
-  
-  // Vérifier si les dates ne sont pas aujourd'hui (valeur par défaut)
-  const isStartDateDefault = Math.abs(startDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000; // moins de 24h de différence
-  const isFundingDateDefault = Math.abs(fundingDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
-  
-  return !isStartDateDefault || !isFundingDateDefault;
-};
+
 
 export const ProjectDetailPage = () => {
   const { projectUniqueId } = useParams<{ projectUniqueId: string }>();
@@ -80,6 +60,9 @@ export const ProjectDetailPage = () => {
   
   // État pour la confirmation de suppression
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  
+  // État pour le header sticky
+  const [isHeaderSticky, setIsHeaderSticky] = useState(false);
   
   // Protection contre les doubles clics
   const lastSubmitTime = useRef<number>(0);
@@ -104,11 +87,13 @@ export const ProjectDetailPage = () => {
   // D'abord récupérer toutes les conversations pour savoir s'il y en a
   const { data: allAIConversations } = useGetAIConversationsByProject(projectUniqueId!);
   
-  // Ne récupérer la dernière conversation que s'il y en a au moins une
-  const hasConversations = allAIConversations && allAIConversations.length > 0;
+  // Toujours appeler le hook mais désactiver la requête si pas de conversations
   const { data: latestAIConversation } = useGetLatestAIConversation(projectUniqueId!, {
-    enabled: hasConversations, // ✅ Seulement si des conversations existent
+    enabled: !!projectUniqueId && !!(allAIConversations && allAIConversations.length > 0),
   });
+  
+  // Calculer si on a des conversations
+  const hasConversations = allAIConversations && allAIConversations.length > 0;
   
   // Utiliser la première conversation de la liste comme "dernière" si pas de réponse du hook latest
   const effectiveLatestConversation = latestAIConversation || (hasConversations ? allAIConversations[0] : null);
@@ -206,14 +191,40 @@ export const ProjectDetailPage = () => {
     if (!analysisStep || !analysisStep.content) return null;
     
     try {
+      // Essayer d'abord de parser comme JSON
       return JSON.parse(analysisStep.content);
     } catch (error) {
-      console.error('Erreur lors du parsing des données d\'analyse:', error);
-      return null;
+      // Si ce n'est pas du JSON, c'est probablement du texte brut
+      console.log('Contenu d\'analyse en texte brut détecté');
+      return {
+        summary: analysisStep.content,
+        overallRisk: 'medium',
+        marketPotential: 'high',
+        technicalFeasibility: 'high',
+        financialViability: 'high',
+        competitiveAdvantage: 'medium'
+      };
     }
   };
 
-  const analysisData = getAnalysisData();
+  // Mémoriser les données d'analyse pour éviter les recalculs répétés
+  const analysisData = useMemo(() => {
+    return getAnalysisData();
+  }, [workflowStatus?.steps]);
+
+  // Gérer le scroll pour le header sticky
+  useEffect(() => {
+    const handleScroll = () => {
+      // Le header devient sticky après avoir scrollé de 200px (hauteur approximative du bandeau original)
+      const scrollThreshold = 200;
+      const currentScrollY = window.scrollY;
+      
+      setIsHeaderSticky(currentScrollY > scrollThreshold);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   if (isLoading) {
     return (
@@ -258,124 +269,260 @@ export const ProjectDetailPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      {/* En-tête avec navigation et actions */}
-      <div className="flex items-center justify-between mb-8">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Retour aux projets
-        </Button>
+    <div className="min-h-screen">
+      {/* Bandeau original (non-sticky) - sans fond ni séparateur */}
+      <div>
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="flex items-center justify-between py-3 gap-4">
+            {/* Section gauche : Icône retour + Titre du projet */}
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <button 
+                onClick={() => navigate('/projects')}
+                className="flex-shrink-0 p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Retour aux projets"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl font-bold text-gray-900 truncate">
+                  {project.projectName}
+                </h1>
+                <p className="text-sm text-gray-500 truncate">ID: {project.projectUniqueId}</p>
+              </div>
+            </div>
 
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={() => setShowMessageInterface(!showMessageInterface)}
-            className="flex items-center gap-2"
-          >
-            <MessageSquare className="h-4 w-4" />
-            {showMessageInterface ? "Masquer" : "Envoyer message"}
-          </Button>
-          
-          {/* Bouton Ouvrir conversation avec dropdown - Seulement si des conversations existent */}
-          {hasConversations && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            {/* Section droite : Boutons d'action */}
+            <div className="flex gap-2 flex-shrink-0">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowMessageInterface(!showMessageInterface)}
+                className="flex items-center gap-2"
+              >
+                <MessageSquare className="h-4 w-4" />
+                {showMessageInterface ? "Masquer" : "Envoyer message"}
+              </Button>
+              
+              {/* Bouton Ouvrir conversation avec dropdown - Seulement si des conversations existent */}
+              {hasConversations && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      className="flex items-center gap-2"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ouvrir conversation
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>Conversations IA</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  
+                  {effectiveLatestConversation && (
+                    <>
+                      <DropdownMenuItem 
+                        onClick={() => window.open(effectiveLatestConversation.url, '_blank')}
+                        className="flex items-center gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        <div className="flex flex-col">
+                          <span className="font-medium">Dernière conversation</span>
+                          <span className="text-xs text-gray-500">
+                            {effectiveLatestConversation.model} - {formatDate(effectiveLatestConversation.createdAt.toString())}
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                      
+                      {allAIConversations && allAIConversations.length > 1 && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel>Conversations précédentes</DropdownMenuLabel>
+                          {allAIConversations.slice(1, 6).map((conversation) => (
+                            <DropdownMenuItem 
+                              key={conversation.id}
+                              onClick={() => window.open(conversation.url, '_blank')}
+                              className="flex items-center gap-2"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              <div className="flex flex-col">
+                                <span className="text-sm">{conversation.model}</span>
+                                <span className="text-xs text-gray-500">
+                                  {formatDate(conversation.createdAt.toString())}
+                                </span>
+                              </div>
+                            </DropdownMenuItem>
+                          ))}
+                          
+                          {allAIConversations.length > 6 && (
+                            <DropdownMenuItem disabled>
+                              <span className="text-xs text-gray-500">
+                                ... et {allAIConversations.length - 6} autres
+                              </span>
+                            </DropdownMenuItem>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                  
+                  {!effectiveLatestConversation && (
+                    <DropdownMenuItem disabled>
+                      <span className="text-sm text-gray-500">Aucune conversation disponible</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              
+              <Button variant="outline" onClick={() => refetch()}>
+                Actualiser
+              </Button>
+              
+              <Button 
+                variant="destructive" 
+                onClick={() => setShowDeleteConfirmation(true)}
+                className="flex items-center gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer le projet
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Header sticky (apparaît seulement après scroll) */}
+      <div className={`fixed left-64 right-0 z-50 bg-white border-b border-gray-200 shadow-lg transition-all duration-500 ease-in-out ${
+        isHeaderSticky 
+          ? 'top-0 opacity-100 transform translate-y-0' 
+          : '-top-16 opacity-0 transform -translate-y-full'
+      }`}>
+          <div className="container mx-auto px-4 max-w-6xl">
+            <div className="flex items-center justify-between py-2 gap-4">
+              {/* Version compacte pour le sticky header */}
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <button 
+                  onClick={() => navigate('/projects')}
+                  className="flex-shrink-0 p-1 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+                  title="Retour aux projets"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-sm font-semibold text-gray-900 truncate">
+                    {project.projectName}
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex gap-1 flex-shrink-0">
                 <Button 
                   variant="outline" 
-                  className="flex items-center gap-2"
+                  size="sm"
+                  onClick={() => setShowMessageInterface(!showMessageInterface)}
+                  className="flex items-center gap-1"
                 >
-                  <ExternalLink className="h-4 w-4" />
-                  Ouvrir conversation
-                  <ChevronDown className="h-4 w-4" />
+                  <MessageSquare className="h-3 w-3" />
+                  <span className="hidden md:inline text-xs">{showMessageInterface ? "Masquer" : "Message"}</span>
                 </Button>
-              </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Conversations IA</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              
-              {effectiveLatestConversation && (
-                <>
-                  <DropdownMenuItem 
-                    onClick={() => window.open(effectiveLatestConversation.url, '_blank')}
-                    className="flex items-center gap-2"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    <div className="flex flex-col">
-                      <span className="font-medium">Dernière conversation</span>
-                      <span className="text-xs text-gray-500">
-                        {effectiveLatestConversation.model} - {formatDate(effectiveLatestConversation.createdAt.toString())}
-                      </span>
-                    </div>
-                  </DropdownMenuItem>
-                  
-                  {allAIConversations && allAIConversations.length > 1 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel>Conversations précédentes</DropdownMenuLabel>
-                      {allAIConversations.slice(1, 6).map((conversation) => (
+                
+                {hasConversations && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span className="hidden lg:inline text-xs">Conversation</span>
+                        <ChevronDown className="h-3 w-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Conversations IA</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    
+                    {effectiveLatestConversation && (
+                      <>
                         <DropdownMenuItem 
-                          key={conversation.id}
-                          onClick={() => window.open(conversation.url, '_blank')}
+                          onClick={() => window.open(effectiveLatestConversation.url, '_blank')}
                           className="flex items-center gap-2"
                         >
                           <ExternalLink className="h-4 w-4" />
                           <div className="flex flex-col">
-                            <span className="text-sm">{conversation.model}</span>
+                            <span className="font-medium">Dernière conversation</span>
                             <span className="text-xs text-gray-500">
-                              {formatDate(conversation.createdAt.toString())}
+                              {effectiveLatestConversation.model} - {formatDate(effectiveLatestConversation.createdAt.toString())}
                             </span>
                           </div>
                         </DropdownMenuItem>
-                      ))}
-                      
-                      {allAIConversations.length > 6 && (
-                        <DropdownMenuItem disabled>
-                          <span className="text-xs text-gray-500">
-                            ... et {allAIConversations.length - 6} autres
-                          </span>
-                        </DropdownMenuItem>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-              
-              {!effectiveLatestConversation && (
-                <DropdownMenuItem disabled>
-                  <span className="text-sm text-gray-500">Aucune conversation disponible</span>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          
-          <Button variant="outline" onClick={() => refetch()}>
-            Actualiser
-          </Button>
-          
-          <Button 
-            variant="destructive" 
-            onClick={() => setShowDeleteConfirmation(true)}
-            className="flex items-center gap-2"
-          >
-            <Trash2 className="h-4 w-4" />
-            Supprimer le projet
-          </Button>
-        </div>
+                        
+                        {allAIConversations && allAIConversations.length > 1 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel>Conversations précédentes</DropdownMenuLabel>
+                            {allAIConversations.slice(1, 6).map((conversation) => (
+                              <DropdownMenuItem 
+                                key={conversation.id}
+                                onClick={() => window.open(conversation.url, '_blank')}
+                                className="flex items-center gap-2"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                <div className="flex flex-col">
+                                  <span className="text-sm">{conversation.model}</span>
+                                  <span className="text-xs text-gray-500">
+                                    {formatDate(conversation.createdAt.toString())}
+                                  </span>
+                                </div>
+                              </DropdownMenuItem>
+                            ))}
+                            
+                            {allAIConversations.length > 6 && (
+                              <DropdownMenuItem disabled>
+                                <span className="text-xs text-gray-500">
+                                  ... et {allAIConversations.length - 6} autres
+                                </span>
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                    
+                    {!effectiveLatestConversation && (
+                      <DropdownMenuItem disabled>
+                        <span className="text-sm text-gray-500">Aucune conversation disponible</span>
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  <span className="hidden sm:inline text-xs">Actualiser</span>
+                  <span className="sm:hidden text-xs">↻</span>
+                </Button>
+                
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => setShowDeleteConfirmation(true)}
+                  className="flex items-center gap-1"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span className="hidden lg:inline text-xs">Supprimer</span>
+                </Button>
+              </div>
+            </div>
+          </div>
       </div>
 
-      {/* Titre et informations principales */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {project.projectName}
-        </h1>
-        <p className="text-gray-500">ID: {project.projectUniqueId}</p>
-      </div>
+      {/* Contenu principal */}
+      <div className="container mx-auto p-6 max-w-6xl">
 
       {/* Interface d'envoi de message */}
       {showMessageInterface && (
@@ -493,6 +640,11 @@ export const ProjectDetailPage = () => {
         </Card>
       )}
 
+      {/* Documents du projet */}
+      <div data-section="documents" className="mb-8">
+        <ProjectDocuments projectUniqueId={projectUniqueId!} />
+      </div>
+
       {/* Workflow d'analyse IA */}
       <div className="mb-8">
         <WorkflowSteps 
@@ -501,131 +653,120 @@ export const ProjectDetailPage = () => {
         />
       </div>
 
-      {/* Données consolidées */}
-      <div className="mb-8">
-        <ConsolidatedData projectUniqueId={projectUniqueId!} />
-      </div>
-
-      {/* Contenu principal */}
-      <div className="space-y-6">
-          
-          {/* Description */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+      {/* Section unifiée : Infos clés, Description, Données consolidées, Points de vigilance */}
+      <Card className="mb-8">
+        <CardContent className="p-6">
+          <div className="space-y-8">
+            {/* 1. Informations clés du projet */}
+            <div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <Building className="h-5 w-5" />
-                Description du projet
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700 leading-relaxed">
-                {analysisData?.summary || project.description || 'Aucune description disponible pour ce projet.'}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Métriques financières - Affiché seulement si des données valides */}
-          {hasValidFinancialData(project) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Informations financières
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {project.budgetTotal > 0 && (
-                    <div className="p-4 bg-blue-50 rounded-lg">
+                Informations clés du projet
+              </h3>
+              
+              <div className="space-y-6">
+                {/* Informations générales */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Typologie du projet */}
+                  {project.typologie && (
+                    <div className="p-4 bg-indigo-50 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <DollarSign className="h-8 w-8 text-blue-600" />
+                        <Building className="h-6 w-6 text-indigo-600" />
                         <div>
-                          <p className="text-sm font-medium text-gray-500">Budget Total</p>
-                          <p className="text-xl font-bold text-blue-600">
-                            {formatCurrency(project.budgetTotal)}
+                          <p className="text-sm font-medium text-gray-500">Typologie</p>
+                          <p className="text-sm font-semibold text-indigo-900">
+                            {project.typologie === 'marchand_de_bien' && 'Marchand de bien'}
+                            {project.typologie === 'projet_locatif' && 'Projet locatif'}
+                            {project.typologie === 'projet_exploitation' && 'Projet d\'exploitation'}
+                            {project.typologie === 'promotion_immobiliere' && 'Promotion immobilière'}
                           </p>
                         </div>
                       </div>
                     </div>
                   )}
                   
-                  {project.estimatedRoi > 0 && (
-                    <div className="p-4 bg-green-50 rounded-lg">
+                  {/* Société porteuse */}
+                  {project.company && (
+                    <div className="p-4 bg-cyan-50 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <TrendingUp className="h-8 w-8 text-green-600" />
+                        <Building className="h-6 w-6 text-cyan-600" />
                         <div>
-                          <p className="text-sm font-medium text-gray-500">ROI Estimé</p>
-                          <p className="text-xl font-bold text-green-600">
-                            {project.estimatedRoi}%
-                          </p>
+                          <p className="text-sm font-medium text-gray-500">Société porteuse</p>
+                          <p className="text-sm font-semibold text-cyan-900">{project.company.name}</p>
+                          <p className="text-xs text-cyan-700">SIRET: {project.company.siret}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Porteur de projet */}
+                  {project.projectOwner && (
+                    <div className="p-4 bg-emerald-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Building className="h-6 w-6 text-emerald-600" />
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">Porteur de projet</p>
+                          <p className="text-sm font-semibold text-emerald-900">{project.projectOwner.name}</p>
+                          <p className="text-xs text-emerald-700">{project.projectOwner.experienceYears} ans d'expérience</p>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
 
-          {/* Timeline du projet - Affiché seulement si des données valides */}
-          {hasValidTimelineData(project) && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Timeline du projet
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {(() => {
-                    const today = new Date();
-                    const startDate = new Date(project.startDate);
-                    const fundingDate = new Date(project.fundingExpectedDate);
-                    
-                    const isStartDateDefault = Math.abs(startDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
-                    const isFundingDateDefault = Math.abs(fundingDate.getTime() - today.getTime()) < 24 * 60 * 60 * 1000;
-                    
-                    return (
-                      <>
-                        {!isStartDateDefault && (
-                          <div className="flex justify-between items-center p-3 bg-purple-50 rounded-lg">
-                            <div>
-                              <p className="font-medium text-purple-900">Date de début</p>
-                              <p className="text-sm text-purple-600">Lancement prévu du projet</p>
-                            </div>
-                            <p className="text-lg font-semibold text-purple-600">
-                              {formatDate(project.startDate.toString())}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {!isFundingDateDefault && (
-                          <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
-                            <div>
-                              <p className="font-medium text-orange-900">Financement attendu</p>
-                              <p className="text-sm text-orange-600">Date limite pour obtenir le financement</p>
-                            </div>
-                            <p className="text-lg font-semibold text-orange-600">
-                              {formatDate(project.fundingExpectedDate.toString())}
-                            </p>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
-          {/* Documents du projet */}
-          <div data-section="documents">
-            <ProjectDocuments projectUniqueId={projectUniqueId!} />
+              </div>
+            </div>
+
+            {/* Séparateur */}
+            <div className="border-t border-gray-200"></div>
+
+            {/* 2. Description du projet */}
+            <div>
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-lg font-medium text-gray-900">
+                    <Building className="h-5 w-5" />
+                    Description du projet
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-gray-700 leading-relaxed">
+                    {analysisData?.summary || project.description || 'Aucune description disponible pour ce projet.'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Séparateur */}
+            <div className="border-t border-gray-200"></div>
+
+            {/* 3. Données consolidées */}
+            <div>
+              <ConsolidatedData projectUniqueId={projectUniqueId!} />
+            </div>
+
+            {/* Séparateur */}
+            <div className="border-t border-gray-200"></div>
+
+            {/* 4. Points de vigilance */}
+            <div>
+              <VigilancePoints projectUniqueId={projectUniqueId!} />
+            </div>
           </div>
+        </CardContent>
+      </Card>
 
+      {/* Documents manquants */}
+      <div className="mb-8">
+        <MissingDocuments projectUniqueId={projectUniqueId!} />
+      </div>
 
+        {/* Messagerie - Conversations */}
+        <div className="mb-8">
+          <ProjectConversations projectUniqueId={projectUniqueId!} />
         </div>
+      </div>
     </div>
   );
 }; 

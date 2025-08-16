@@ -1,15 +1,35 @@
 // Types partagés pour les projets
+export type ProjectTypology = 
+  | 'marchand_de_bien'
+  | 'projet_locatif' 
+  | 'projet_exploitation'
+  | 'promotion_immobiliere';
+
 export type Project = {
   id: string;
   projectUniqueId: string;
   projectName: string;
   description: string;
-  budgetTotal: string;
-  estimatedRoi: string;
+  typologie?: ProjectTypology;
+  budgetTotal: number;
+  estimatedRoi: number;
   startDate: Date;
   fundingExpectedDate: Date;
   createdAt: Date;
   updatedAt: Date;
+  // Relations
+  company?: {
+    id: string;
+    name: string;
+    siret: string;
+    reputationDescription: string;
+  };
+  projectOwner?: {
+    id: string;
+    name: string;
+    experienceYears: number;
+    reputationDescription: string;
+  };
 };
 
 export type Document = {
@@ -94,6 +114,30 @@ export type DeleteProjectResponse = {
   };
 };
 
+export type DeleteDocumentInput = {
+  projectUniqueId: string;
+  documentId: string;
+};
+
+export type DeleteDocumentResponse = {
+  success: boolean;
+  message: string;
+  deletedDocument: {
+    id: string;
+    fileName: string;
+  };
+};
+
+export type DeleteAllDocumentsResponse = {
+  success: boolean;
+  message: string;
+  deletedCount: number;
+  deletedDocuments: {
+    id: string;
+    fileName: string;
+  }[];
+};
+
 // Pagination types
 export type PaginatedProjectsResponse = {
   items: ProjectResponse[];
@@ -144,7 +188,7 @@ export type AnalysisStep = {
   createdAt: Date;
 };
 
-export type ProjectAnalysisWorkflow = {
+export type ProjectAnalysisProgress = {
   id: string;
   projectId: string;
   stepId: number;
@@ -179,20 +223,20 @@ export type InitiateWorkflowInput = {
 };
 
 // Response types pour le workflow
-export type AnalysisStepResponse = AnalysisStep;
+export type AnalysisStepDefinitionResponse = AnalysisStep;
 
-export type ProjectAnalysisWorkflowResponse = ProjectAnalysisWorkflow & {
-  step: AnalysisStepResponse;
+export type ProjectAnalysisProgressResponse = ProjectAnalysisProgress & {
+  step: AnalysisStepDefinitionResponse;
 };
 
 export type ProjectWorkflowStatusResponse = {
   projectUniqueId: string;
   projectId: string;
-  steps: ProjectAnalysisWorkflowResponse[];
+  steps: ProjectAnalysisProgressResponse[];
   overallStatus: 'not_started' | 'in_progress' | 'completed' | 'failed';
   completedSteps: number;
   totalSteps: number;
-  currentStep: ProjectAnalysisWorkflowResponse | null;
+  currentStep: ProjectAnalysisProgressResponse | null;
 };
 
 // Types pour les endpoints spécifiques par étape
@@ -209,11 +253,11 @@ export type DocumentsStepInput = WorkflowStepEndpointInput;
 export type VigilanceStepInput = WorkflowStepEndpointInput;
 export type MessageStepInput = WorkflowStepEndpointInput;
 
-export type OverviewStepResponse = ProjectAnalysisWorkflowResponse;
-export type AnalysisStepResponse = ProjectAnalysisWorkflowResponse;
-export type DocumentsStepResponse = ProjectAnalysisWorkflowResponse;
-export type VigilanceStepResponse = ProjectAnalysisWorkflowResponse;
-export type MessageStepResponse = ProjectAnalysisWorkflowResponse;
+export type OverviewStepResponse = ProjectAnalysisProgressResponse;
+export type AnalysisStepResponse = ProjectAnalysisProgressResponse;
+export type DocumentsStepResponse = ProjectAnalysisProgressResponse;
+export type VigilanceStepResponse = ProjectAnalysisProgressResponse;
+export type MessageStepResponse = ProjectAnalysisProgressResponse;
 
 // Types pour les conversations IA
 export type SaveConversationInput = {

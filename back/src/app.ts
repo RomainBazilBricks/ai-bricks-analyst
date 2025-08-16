@@ -20,7 +20,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 app.use(cors({
   origin: isProduction ? false : ['http://localhost:5173'], // Désactiver CORS en production
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 

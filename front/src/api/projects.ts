@@ -10,7 +10,9 @@ import type {
   UpdateProjectConversationInput,
   ProjectDocumentUrls,
   DeleteProjectInput,
-  DeleteProjectResponse
+  DeleteProjectResponse,
+  DeleteDocumentResponse,
+  DeleteAllDocumentsResponse
 } from "@shared/types/projects";
 
 /**
@@ -98,4 +100,16 @@ export const useGetProjectDocumentUrls = (projectUniqueId: string, options = {})
  * Hook pour supprimer un projet et toutes ses données associées
  */
 export const useDeleteProject = (options = {}) =>
-  useMutator<DeleteProjectInput, DeleteProjectResponse>("/projects/delete", options); 
+  useMutator<DeleteProjectInput, DeleteProjectResponse>("/projects/delete", options);
+
+/**
+ * Hook pour supprimer un document d'un projet
+ */
+export const useDeleteDocument = (projectUniqueId: string, documentId: string, options = {}) =>
+  useMutator<undefined, DeleteDocumentResponse>(`/projects/${projectUniqueId}/documents/${documentId}/delete`, options);
+
+/**
+ * Hook pour supprimer tous les documents d'un projet
+ */
+export const useDeleteAllDocuments = (projectUniqueId: string, options = {}) =>
+  useMutator<undefined, DeleteAllDocumentsResponse>(`/projects/${projectUniqueId}/documents/delete-all`, options); 
