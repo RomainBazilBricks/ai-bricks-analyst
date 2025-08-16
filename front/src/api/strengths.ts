@@ -7,7 +7,17 @@ import type { StrengthPoint } from "@shared/types/projects";
 export const useGetStrengths = (projectUniqueId: string, options = {}) => {
   return useFetcher<undefined, StrengthPoint[]>({
     key: ["strengths", projectUniqueId],
-    path: `/api/projects/${projectUniqueId}/strengths`,
-    options,
+    path: `/projects/${projectUniqueId}/strengths`,
+    options: {
+      ...options,
+      // Transformer les erreurs en tableau vide pour éviter les crashes
+      select: (data: any) => {
+        if (Array.isArray(data)) {
+          return data;
+        }
+        // Si ce n'est pas un tableau (erreur, null, etc.), retourner un tableau vide
+        return [];
+      },
+    },
   });
 };

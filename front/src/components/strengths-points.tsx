@@ -71,6 +71,9 @@ const StrengthPointRow = ({ point }: { point: StrengthPoint }) => {
 export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
   const { data: strengths, isLoading, isError } = useGetStrengths(projectUniqueId);
 
+  // S'assurer que strengths est toujours un tableau
+  const safeStrengths = Array.isArray(strengths) ? strengths : [];
+
   if (isLoading) {
     return (
       <Card className="border-0 shadow-sm">
@@ -112,7 +115,7 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
     );
   }
 
-  if (!strengths || strengths.length === 0) {
+  if (!safeStrengths || safeStrengths.length === 0) {
     return (
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
@@ -143,7 +146,7 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
           </CardTitle>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="bg-green-50 border-green-200 text-green-800">
-              {strengths.length} identifiés
+              {safeStrengths.length} identifiés
             </Badge>
           </div>
         </div>
@@ -151,7 +154,7 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
       
       <CardContent className="pt-0">
         <div className="space-y-0">
-          {strengths.map((point) => (
+          {safeStrengths.map((point) => (
             <StrengthPointRow key={point.id} point={point} />
           ))}
         </div>
