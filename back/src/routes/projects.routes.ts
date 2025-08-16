@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { 
   createProject, 
   getPaginatedProjects, 
-  getProjectById,
+  getProjectById, 
   getProjectDocuments,
   getProjectDocumentUrls,
   getProjectDocumentsListPage,
+  downloadDocument,
   deleteProject
 } from '@/controllers/projects.controller';
 
@@ -58,6 +59,12 @@ router.get('/:projectUniqueId/document-urls', getProjectDocumentUrls);
  * @returns {string} Page HTML avec la liste des documents
  */
 router.get('/:projectUniqueId/documents-list', getProjectDocumentsListPage);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/documents/:documentId/download
+ * @description Télécharge un document directement depuis S3 (endpoint proxy pour Manus)
+ */
+router.get('/:projectUniqueId/documents/:documentId/download', downloadDocument);
 
 /**
  * @route POST /api/projects/delete

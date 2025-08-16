@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { eq, desc, gt, lt, asc } from 'drizzle-orm';
+import { eq, desc, gt, lt, asc, and } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { 
   projects, 
@@ -15,7 +15,8 @@ import {
   project_analysis_workflow
 } from '@/db/schema';
 import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
-import { uploadFileFromUrl } from '@/lib/s3';
+import { uploadFileFromUrl, s3Client } from '@/lib/s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
   CreateProjectInput, 
   ProjectResponse, 
@@ -437,6 +438,7 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
     try {
       projectDocuments = await db
         .select({
+          id: documents.id,
           fileName: documents.fileName,
           url: documents.url,
           mimeType: documents.mimeType,
@@ -451,9 +453,13 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
       console.warn('Error fetching documents for list page:', dbError);
     }
 
-    // Générer la liste simple des URLs
+    // Générer la liste avec les endpoints proxy (plus fiables pour Manus)
+    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
     const documentsList = projectDocuments.length > 0 
-      ? projectDocuments.map(doc => `<li><a href="${doc.url}" target="_blank">${doc.url}</a></li>`).join('')
+      ? projectDocuments.map(doc => {
+          const proxyUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents/${doc.id}/download`;
+          return `<li><a href="${proxyUrl}" target="_blank">${doc.fileName} (${doc.mimeType})</a></li>`;
+        }).join('')
       : '<li>Aucun document disponible pour ce projet.</li>';
 
     const htmlPage = `
@@ -513,6 +519,111 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
       </body>
       </html>
     `);
+  }
+};
+
+/**
+ * Sert un document directement depuis S3 (endpoint proxy pour Manus)
+ * @route GET /api/projects/:projectUniqueId/documents/:documentId/download
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} documentId - Identifiant du document
+ * @returns Document binaire avec les bons headers
+ */
+export const downloadDocument = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, documentId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id, projectName: projects.projectName })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer le document spécifique
+    const document = await db
+      .select({
+        id: documents.id,
+        fileName: documents.fileName,
+        url: documents.url,
+        mimeType: documents.mimeType,
+        size: documents.size,
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(and(
+        eq(sessions.projectId, project[0].id),
+        eq(documents.id, documentId)
+      ))
+      .limit(1);
+
+    if (document.length === 0) {
+      return res.status(404).json({ 
+        error: 'Document not found',
+        code: 'DOCUMENT_NOT_FOUND'
+      });
+    }
+
+    const doc = document[0];
+    
+    // Extraire la clé S3 depuis l'URL
+    const s3Url = doc.url;
+    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
+    const region = process.env.AWS_S3_REGION || 'eu-north-1';
+    
+    // Pattern: https://bucket.s3.region.amazonaws.com/key
+    const s3UrlPattern = new RegExp(`https://${bucketName}\\.s3\\.${region}\\.amazonaws\\.com/(.+)`);
+    const match = s3Url.match(s3UrlPattern);
+    
+    if (!match) {
+      return res.status(400).json({ 
+        error: 'Invalid S3 URL format',
+        code: 'INVALID_S3_URL'
+      });
+    }
+    
+    const s3Key = match[1];
+    
+    console.log(`📥 Téléchargement document: ${doc.fileName} (${s3Key})`);
+    
+    // Récupérer le fichier depuis S3
+    const getCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: s3Key,
+    });
+    
+    const s3Response = await s3Client.send(getCommand);
+    
+    if (!s3Response.Body) {
+      return res.status(404).json({ 
+        error: 'Document content not found',
+        code: 'DOCUMENT_CONTENT_NOT_FOUND'
+      });
+    }
+    
+    // Configurer les headers de réponse
+    res.setHeader('Content-Type', doc.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.fileName}"`);
+    res.setHeader('Content-Length', doc.size.toString());
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1h
+    
+    // Stream le contenu
+    const stream = s3Response.Body as any;
+    stream.pipe(res);
+    
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'DOCUMENT_DOWNLOAD_ERROR'
+    });
   }
 };
 
