@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useGetWorkflowStatus, useInitiateWorkflow, useGetAnalysisSteps } from "@/api/workflow";
-import { useSendPromptToAI, type AIPromptRequest } from "@/api/ai-interface";
 import { useSendMessageToTool, type SendMessageInput } from "@/api/external-tools";
 import { useSaveAIConversation } from "@/api/ai-conversations";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
