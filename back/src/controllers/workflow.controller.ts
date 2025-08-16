@@ -6,7 +6,7 @@ import {
   analysis_steps, 
   project_analysis_progress,
   missing_documents,
-  vigilance_points,
+  strengths_and_weaknesses,
   conversations_with_ai,
   sessions,
   documents,
@@ -18,7 +18,7 @@ import {
   AnalysisMacroPayloadSchema,
   AnalysisDescriptionPayloadSchema,
   MissingDocumentsPayloadSchema,
-  VigilancePointsPayloadSchema,
+  StrengthsWeaknessesPayloadSchema,
   FinalMessagePayloadSchema,
   ConsolidatedDataPayloadSchema,
   consolidated_data,
@@ -1206,13 +1206,13 @@ export const testPromptProcessing = async (req: Request, res: Response): Promise
 };
 
 /**
- * Endpoint pour recevoir les points de vigilance de l'IA (Étape 4)
- * @route POST /api/workflow/vigilance-points/:projectUniqueId
+ * Endpoint pour recevoir les forces et faiblesses de l'IA (Étape 4)
+ * @route POST /api/workflow/strengths-and-weaknesses/:projectUniqueId
  */
-export const receiveVigilancePoints = async (req: Request, res: Response): Promise<any> => {
+export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId } = req.params;
-    const validatedData = VigilancePointsPayloadSchema.parse({ 
+    const validatedData = StrengthsWeaknessesPayloadSchema.parse({ 
       ...req.body, 
       projectUniqueId 
     });
@@ -1230,23 +1230,24 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
       });
     }
 
-    // Créer les points de vigilance
-    const pointsToCreate = validatedData.vigilancePoints.map(point => ({
+    // Créer les forces et faiblesses
+    const itemsToCreate = validatedData.strengthsAndWeaknesses.map((item: any) => ({
       projectId: project[0].id,
-      title: point.title,
-      whyVigilance: point.whyVigilance,
-      riskLevel: point.riskLevel,
-      potentialImpact: point.potentialImpact,
-      recommendations: point.recommendations,
+      type: item.type,
+      title: item.title,
+      description: item.description,
+      riskLevel: 'medium' as const, // Valeur par défaut
+      potentialImpact: '',
+      recommendations: [],
       status: 'pending' as const,
       whyStatus: '',
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
 
-    const createdPoints = await db
-      .insert(vigilance_points)
-      .values(pointsToCreate)
+    const createdItems = await db
+      .insert(strengths_and_weaknesses)
+      .values(itemsToCreate)
       .returning();
 
     // Mettre à jour l'étape du workflow
@@ -1256,7 +1257,7 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
       .where(
         and(
           eq(project_analysis_progress.projectId, project[0].id),
-          eq(project_analysis_progress.stepId, 4) // Étape 4 = points de vigilance
+          eq(project_analysis_progress.stepId, 4) // Étape 4 = forces et faiblesses
         )
       )
       .limit(1);
@@ -1266,7 +1267,7 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
         .update(project_analysis_progress)
         .set({
           status: 'completed',
-          content: JSON.stringify(validatedData.vigilancePoints),
+          content: JSON.stringify(validatedData.strengthsAndWeaknesses),
           completedAt: new Date(),
           updatedAt: new Date(),
         })
@@ -1281,21 +1282,21 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
 
     res.status(200).json({
       success: true,
-      message: 'Points de vigilance reçus et enregistrés avec succès',
+      message: 'Forces et faiblesses reçues et enregistrées avec succès',
       workflowStepId: workflowStep.length > 0 ? workflowStep[0].id : null,
-      pointsCreated: createdPoints.length,
-      data: createdPoints.map(point => ({
-        id: point.id,
-        title: point.title,
-        riskLevel: point.riskLevel,
-        status: point.status
+      itemsCreated: createdItems.length,
+      data: createdItems.map((item: any) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        status: item.status
       })),
       nextStepTriggered: triggerResult.success
     });
   } catch (error) {
     res.status(500).json({ 
       error: (error as Error).message,
-      code: 'RECEIVE_VIGILANCE_POINTS_ERROR'
+      code: 'RECEIVE_STRENGTHS_WEAKNESSES_ERROR'
     });
   }
 };

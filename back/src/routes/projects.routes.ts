@@ -12,6 +12,7 @@ import {
   updateMissingDocumentStatus,
   getVigilancePoints,
   updateVigilancePointStatus,
+  getProjectStrengths,
   getProjectConversations,
   createOrUpdateDraft,
   deleteProject,
@@ -104,6 +105,12 @@ router.get('/:projectUniqueId/vigilance-points', getVigilancePoints);
  * @description Met à jour le statut d'un point de vigilance
  */
 router.patch('/:projectUniqueId/vigilance-points/:pointId', updateVigilancePointStatus);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/strengths
+ * @description Récupère les points forts d'un projet
+ */
+router.get('/:projectUniqueId/strengths', getProjectStrengths);
 
 /**
  * @route GET /api/projects/:projectUniqueId/conversations

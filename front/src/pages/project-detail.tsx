@@ -7,6 +7,7 @@ import { ProjectDocuments } from "@/components/project-documents";
 import { ConsolidatedDataComponent } from "@/components/consolidated-data";
 import { MissingDocuments } from "@/components/missing-documents";
 import { VigilancePoints } from "@/components/vigilance-points";
+import { StrengthsPoints } from "@/components/strengths-points";
 import { ProjectConversations } from "@/components/project-conversations";
 
 import { useGetWorkflowStatus } from "@/api/workflow";
@@ -31,7 +32,8 @@ import {
   Send,
   ExternalLink,
   ChevronDown,
-  Trash2
+  Trash2,
+  TrendingUp
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 import type { SendMessageInput, SendMessageResponse } from "@/api/external-tools";
@@ -749,9 +751,23 @@ export const ProjectDetailPage = () => {
             {/* Séparateur */}
             <div className="border-t border-gray-200"></div>
 
-            {/* 4. Points de vigilance */}
+            {/* 4. Points forts et de vigilance en 2 colonnes */}
             <div>
-              <VigilancePoints projectUniqueId={projectUniqueId!} />
+              <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Analyse des forces et faiblesses
+              </h3>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Colonne gauche : Points forts */}
+                <div>
+                  <StrengthsPoints projectUniqueId={projectUniqueId!} />
+                </div>
+                
+                {/* Colonne droite : Points de vigilance */}
+                <div>
+                  <VigilancePoints projectUniqueId={projectUniqueId!} />
+                </div>
+              </div>
             </div>
           </div>
         </CardContent>

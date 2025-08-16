@@ -273,4 +273,18 @@ export type ConversationResponse = {
   url: string;
   model: string;
   createdAt: Date;
+};
+
+// Types pour les points forts
+export type StrengthPoint = {
+  id: string;
+  title: string;
+  description: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  potentialImpact: string;
+  recommendations: string[];
+  status: 'pending' | 'resolved' | 'irrelevant';
+  whyStatus: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }; 

@@ -15,7 +15,7 @@ import {
   receiveAnalysisMacro,
   receiveMissingDocuments,
   testPromptProcessing,
-  receiveVigilancePoints,
+  receiveStrengthsAndWeaknesses,
   receiveFinalMessage
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
@@ -172,7 +172,7 @@ router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
  * @returns {VigilancePointsResponse} Confirmation et points créés
  * @access Public (pour IA)
  */
-router.post('/vigilance-points/:projectUniqueId', receiveVigilancePoints);
+router.post('/strengths-and-weaknesses/:projectUniqueId', receiveStrengthsAndWeaknesses);
 
 /**
  * Endpoint pour recevoir le message final de l'IA (Étape 5)

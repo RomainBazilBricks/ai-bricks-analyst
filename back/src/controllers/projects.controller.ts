@@ -10,7 +10,7 @@ import {
   project_owners,
   companies,
   missing_documents,
-  vigilance_points,
+  strengths_and_weaknesses,
   conversations,
   project_analysis_progress,
   consolidated_data
@@ -867,9 +867,9 @@ export const getVigilancePoints = async (req: Request, res: Response): Promise<a
     // Récupérer les points de vigilance
     const vigilancePoints = await db
       .select()
-      .from(vigilance_points)
-      .where(eq(vigilance_points.projectId, project[0].id))
-      .orderBy(desc(vigilance_points.createdAt));
+      .from(strengths_and_weaknesses)
+      .where(eq(strengths_and_weaknesses.projectId, project[0].id))
+      .orderBy(desc(strengths_and_weaknesses.createdAt));
 
     console.log(`📋 Points de vigilance récupérés pour le projet ${projectUniqueId}: ${vigilancePoints.length} points`);
 
@@ -922,10 +922,10 @@ export const updateVigilancePointStatus = async (req: Request, res: Response): P
     // Vérifier que le point de vigilance existe et appartient au projet
     const existingPoint = await db
       .select()
-      .from(vigilance_points)
+      .from(strengths_and_weaknesses)
       .where(and(
-        eq(vigilance_points.id, pointId),
-        eq(vigilance_points.projectId, project[0].id)
+        eq(strengths_and_weaknesses.id, pointId),
+        eq(strengths_and_weaknesses.projectId, project[0].id)
       ))
       .limit(1);
 
@@ -938,13 +938,13 @@ export const updateVigilancePointStatus = async (req: Request, res: Response): P
 
     // Mettre à jour le statut
     const updatedPoint = await db
-      .update(vigilance_points)
+      .update(strengths_and_weaknesses)
       .set({
         status: status as 'resolved' | 'irrelevant' | 'pending',
         whyStatus: whyStatus || null,
         updatedAt: new Date()
       })
-      .where(eq(vigilance_points.id, pointId))
+      .where(eq(strengths_and_weaknesses.id, pointId))
       .returning();
 
     console.log(`📋 Point de vigilance ${pointId} mis à jour: ${status}`);
@@ -1183,8 +1183,8 @@ export const deleteProject = async (req: Request, res: Response): Promise<any> =
 
     // Supprimer les points de vigilance
     await db
-      .delete(vigilance_points)
-      .where(eq(vigilance_points.projectId, projectId));
+      .delete(strengths_and_weaknesses)
+      .where(eq(strengths_and_weaknesses.projectId, projectId));
 
     // Supprimer le workflow d'analyse
     const workflowDeleted = await db
@@ -1378,6 +1378,64 @@ export const deleteAllDocuments = async (req: Request, res: Response): Promise<a
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'DELETE_ALL_DOCUMENTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Récupère tous les points forts d'un projet
+ * @route GET /api/projects/:projectUniqueId/strengths
+ * @param {string} projectUniqueId - ID unique du projet
+ * @returns {StrengthPoint[]} Liste des points forts du projet
+ */
+export const getProjectStrengths = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer tous les points forts du projet
+    const strengths = await db
+      .select()
+      .from(strengths_and_weaknesses)
+      .where(and(
+        eq(strengths_and_weaknesses.projectId, project[0].id),
+        eq(strengths_and_weaknesses.type, 'strength')
+      ))
+      .orderBy(desc(strengths_and_weaknesses.createdAt));
+
+    // Transformer les données pour l'API
+    const strengthsResponse = strengths.map(strength => ({
+      id: strength.id,
+      title: strength.title,
+      description: strength.description,
+      riskLevel: strength.riskLevel,
+      potentialImpact: strength.potentialImpact,
+      recommendations: strength.recommendations as string[],
+      status: strength.status,
+      whyStatus: strength.whyStatus || null,
+      createdAt: strength.createdAt,
+      updatedAt: strength.updatedAt
+    }));
+
+    res.json(strengthsResponse);
+  } catch (error) {
+    console.error('Error fetching project strengths:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'GET_PROJECT_STRENGTHS_ERROR'
     });
   }
 }; 
