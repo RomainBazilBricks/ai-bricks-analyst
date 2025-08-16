@@ -11,7 +11,8 @@
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:push": "drizzle-kit push",
     "drizzle:pull": "drizzle-kit pull",
-    "update-prompts": "ts-node --require module-alias/register src/scripts/update-prompts.ts"
+    "update-prompts": "ts-node --require module-alias/register src/scripts/update-prompts.ts",
+    "reset-steps": "ts-node --require module-alias/register src/scripts/reset-workflow-steps.ts"
   },
   "author": "",
   "license": "ISC",

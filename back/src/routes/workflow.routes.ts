@@ -11,11 +11,12 @@ import {
   updateDocumentsStep,
   updateVigilanceStep,
   updateMessageStep,
+  receiveConsolidatedData,
   receiveAnalysisMacro,
-  receiveAnalysisDescription,
   receiveMissingDocuments,
   testPromptProcessing,
-  receiveVigilancePoints
+  receiveVigilancePoints,
+  receiveFinalMessage
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
 
@@ -144,16 +145,16 @@ router.post('/step-5-message', updateMessageStep);
  * @returns {AnalysisMacroResponse} Confirmation et données sauvegardées
  * @access Public (pour IA)
  */
-router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
-
 /**
- * Endpoint pour recevoir l'analyse détaillée de l'IA (Étape 2)
- * @route POST /api/workflow/analysis-description/:projectUniqueId
- * @param {AnalysisDescriptionPayload} body - Données de l'analyse détaillée
- * @returns {AnalysisDescriptionResponse} Confirmation et données sauvegardées
+ * Endpoint pour recevoir les données consolidées de l'IA (Étape 2)
+ * @route POST /api/workflow/consolidated-data/:projectUniqueId
+ * @param {ConsolidatedDataPayload} body - Données consolidées du projet
+ * @returns {ConsolidatedDataResponse} Confirmation et données sauvegardées
  * @access Public (pour IA)
  */
-router.post('/analysis-description/:projectUniqueId', receiveAnalysisDescription);
+router.post('/consolidated-data/:projectUniqueId', receiveConsolidatedData);
+
+router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
 
 /**
  * Endpoint pour recevoir les documents manquants de l'IA (Étape 3)
@@ -172,6 +173,15 @@ router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
  * @access Public (pour IA)
  */
 router.post('/vigilance-points/:projectUniqueId', receiveVigilancePoints);
+
+/**
+ * Endpoint pour recevoir le message final de l'IA (Étape 5)
+ * @route POST /api/workflow/final-message/:projectUniqueId
+ * @param {FinalMessagePayload} body - Message final et synthèse
+ * @returns {FinalMessageResponse} Confirmation et workflow terminé
+ * @access Public (pour IA)
+ */
+router.post('/final-message/:projectUniqueId', receiveFinalMessage);
 
 /**
  * Endpoint de test pour voir comment les placeholders sont remplacés

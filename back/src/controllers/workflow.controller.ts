@@ -10,6 +10,7 @@ import {
   conversations_with_ai,
   sessions,
   documents,
+  conversations,
   CreateAnalysisStepSchema,
   UpdateWorkflowStepSchema,
   InitiateWorkflowSchema,
@@ -18,6 +19,9 @@ import {
   AnalysisDescriptionPayloadSchema,
   MissingDocumentsPayloadSchema,
   VigilancePointsPayloadSchema,
+  FinalMessagePayloadSchema,
+  ConsolidatedDataPayloadSchema,
+  consolidated_data,
   WorkflowStatus
 } from '@/db/schema';
 import { eq, and, asc, desc } from 'drizzle-orm';
@@ -100,6 +104,119 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
 };
 
 /**
+ * Fonction utilitaire pour déclencher automatiquement l'étape suivante du workflow
+ */
+const triggerNextWorkflowStep = async (projectUniqueId: string, currentStepId: number): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
+  try {
+    console.log(`🔄 Déclenchement automatique de l'étape suivante pour le projet: ${projectUniqueId}, étape courante: ${currentStepId}`);
+    
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return { success: false, error: 'Projet non trouvé' };
+    }
+
+    // Récupérer l'étape suivante (order = currentStepId + 1)
+    const nextStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, currentStepId + 1),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (nextStep.length === 0) {
+      console.log(`✅ Aucune étape suivante trouvée pour l'ordre ${currentStepId + 1}. Workflow terminé.`);
+      return { success: true };
+    }
+
+    // Vérifier que l'étape suivante existe dans le workflow du projet
+    const nextWorkflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(and(
+        eq(project_analysis_workflow.projectId, project[0].id),
+        eq(project_analysis_workflow.stepId, nextStep[0].id)
+      ))
+      .limit(1);
+
+    if (nextWorkflowStep.length === 0) {
+      return { success: false, error: 'Étape suivante non trouvée dans le workflow du projet' };
+    }
+
+    // Vérifier que l'étape suivante est en statut 'pending'
+    if (nextWorkflowStep[0].status !== 'pending') {
+      console.log(`⚠️ L'étape suivante n'est pas en statut 'pending' (statut actuel: ${nextWorkflowStep[0].status})`);
+      return { success: true }; // Pas d'erreur, mais pas de déclenchement
+    }
+
+    // Mettre l'étape suivante en statut 'in_progress'
+    await db
+      .update(project_analysis_workflow)
+      .set({
+        status: 'in_progress',
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_workflow.id, nextWorkflowStep[0].id));
+
+    // Récupérer l'URL de conversation de l'étape précédente si disponible
+    // Note: Pour l'instant, nous utilisons la conversation la plus récente du projet
+    const previousConversation = await db
+      .select()
+      .from(conversations_with_ai)
+      .innerJoin(sessions, eq(conversations_with_ai.sessionId, sessions.id))
+      .where(eq(sessions.projectId, project[0].id))
+      .orderBy(desc(conversations_with_ai.createdAt))
+      .limit(1);
+
+    const conversationUrl = previousConversation.length > 0 ? previousConversation[0].conversations_with_ai.url : undefined;
+
+    // Envoyer le prompt à l'IA pour l'étape suivante
+    const aiResult = await sendPromptToAI(
+      nextStep[0].prompt,
+      projectUniqueId,
+      nextStep[0].id,
+      nextStep[0].name,
+      conversationUrl
+    );
+
+    if (aiResult.success) {
+      console.log(`✅ Étape suivante "${nextStep[0].name}" déclenchée avec succès`);
+      
+      // Sauvegarder la conversation si une URL est retournée
+      // Note: Pour l'instant, nous ne sauvegardons pas automatiquement les conversations
+      // car elles sont liées aux sessions et non directement aux projets
+      if (aiResult.conversationUrl) {
+        console.log(`💾 URL de conversation disponible: ${aiResult.conversationUrl}`);
+        // TODO: Implémenter la sauvegarde dans une session appropriée
+      }
+    } else {
+      console.error(`❌ Erreur lors du déclenchement de l'étape suivante: ${aiResult.error}`);
+      
+      // Remettre l'étape en statut 'pending' en cas d'erreur
+      await db
+        .update(project_analysis_workflow)
+        .set({
+          status: 'pending',
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_workflow.id, nextWorkflowStep[0].id));
+    }
+
+    return aiResult;
+  } catch (error) {
+    console.error(`❌ Erreur lors du déclenchement automatique de l'étape suivante:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+/**
  * Initialise les étapes d'analyse par défaut dans la base de données
  * Cette fonction doit être appelée au démarrage de l'application
  */
@@ -113,36 +230,36 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
       const defaultSteps = [
         {
           name: 'Analyse globale',
-          description: 'Une analyse détaillée et approfondie du projet',
-          prompt: 'ÉTAPE 1 - RÉCUPÉRATION DES DOCUMENTS :\nCommencez par récupérer la liste des documents associés au projet en effectuant un appel GET sur l\'endpoint :\n/api/projects/{projectUniqueId}/document-urls\n\nCet appel vous retournera :\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "documentUrls": ["url1", "url2", "url3", ...]\n}\n\nÉTAPE 2 - ANALYSE DES DOCUMENTS :\nAnalysez chaque document accessible via les URLs récupérées et réalisez une analyse détaillée et structurée du projet d\'investissement. Incluez :\n1) Analyse financière (rentabilité, cash-flow, ROI)\n2) Analyse du marché local\n3) Évaluation des risques\n4) Points forts et faiblesses\n5) Recommandations stratégiques\n\nSoyez précis et utilisez les données des documents fournis.\n\nÉTAPE 3 - RETOUR DE L\'ANALYSE :\nRetournez votre analyse sous forme JSON structuré via POST sur l\'endpoint /api/workflow/analysis-macro/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "macroAnalysis": {\n    "overallRisk": "low|medium|high",\n    "marketPotential": "low|medium|high",\n    "technicalFeasibility": "low|medium|high",\n    "financialViability": "low|medium|high",\n    "competitiveAdvantage": "low|medium|high",\n    "summary": "Résumé de votre analyse globale",\n    "keyStrengths": ["Point fort 1", "Point fort 2", ...],\n    "keyWeaknesses": ["Point faible 1", "Point faible 2", ...],\n    "recommendedActions": ["Action recommandée 1", "Action recommandée 2", ...]\n  }\n}',
+          description: 'Une analyse détaillée et approfondie du projet avec vue d\'ensemble',
+          prompt: '',
           order: 1,
           isActive: 1
         },
         {
-          name: 'Vue d\'ensemble du projet',
-          description: 'Une description générale de quelques lignes sur le projet',
-          prompt: 'Analysez les documents fournis et rédigez une vue d\'ensemble concise du projet d\'investissement immobilier en 3-5 lignes maximum. Focalisez-vous sur les éléments clés : type de bien, localisation, objectif d\'investissement et rentabilité attendue.\n\nIMPORTANT: Développez maintenant cette analyse en sections détaillées via POST sur l\'endpoint /api/workflow/analysis-description/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "detailedAnalysis": {\n    "businessModel": {\n      "description": "Description détaillée du modèle économique",\n      "revenueStreams": ["Source de revenus 1", "Source de revenus 2"],\n      "keyPartners": ["Partenaire clé 1", "Partenaire clé 2"],\n      "valueProposition": "Proposition de valeur principale"\n    },\n    "marketAnalysis": {\n      "targetMarket": "Description du marché cible",\n      "marketSize": "Taille et caractéristiques du marché",\n      "competitorAnalysis": "Analyse concurrentielle",\n      "marketTrends": ["Tendance 1", "Tendance 2"]\n    },\n    "technicalAnalysis": {\n      "technologyStack": ["Technologie 1", "Technologie 2"],\n      "technicalRisks": ["Risque technique 1", "Risque technique 2"],\n      "developmentTimeline": "Planning de développement",\n      "scalabilityAssessment": "Évaluation de la scalabilité"\n    },\n    "financialProjections": {\n      "revenueProjection": "Projections de revenus détaillées",\n      "costStructure": "Structure des coûts",\n      "breakEvenAnalysis": "Analyse de seuil de rentabilité",\n      "fundingRequirements": "Besoins de financement"\n    },\n    "teamAssessment": {\n      "keyPersonnel": ["Personnel clé 1", "Personnel clé 2"],\n      "skillsGaps": ["Lacune 1", "Lacune 2"],\n      "organizationalStructure": "Structure organisationnelle"\n    }\n  }\n}',
+          name: 'Consolidation des données',
+          description: 'Récupère et structure toutes les données clés nécessaires à l\'analyse',
+          prompt: '',
           order: 2,
           isActive: 1
         },
         {
           name: 'Récupération des documents manquants',
           description: 'Liste des documents attendus en complément pour approfondir l\'analyse',
-          prompt: 'Identifiez et listez tous les documents manquants qui seraient nécessaires pour compléter l\'analyse de ce projet d\'investissement immobilier. Organisez-les par catégorie (financier, juridique, technique, marché) et précisez l\'importance de chaque document pour la prise de décision.\n\nIMPORTANT: Structurez votre liste via POST sur l\'endpoint /api/workflow/missing-documents/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "missingDocuments": [\n    {\n      "name": "Nom précis du document",\n      "whyMissing": "Explication de pourquoi ce document est nécessaire",\n      "priority": "high|medium|low",\n      "category": "legal|financial|technical|business|regulatory",\n      "impactOnProject": "Impact de l\'absence de ce document sur le projet",\n      "suggestedSources": ["Source suggérée 1", "Source suggérée 2"]\n    }\n  ]\n}',
+          prompt: '',
           order: 3,
           isActive: 1
         },
         {
           name: 'Points de vigilance',
           description: 'Identification des risques critiques qui pourraient compromettre le financement',
-          prompt: 'Analysez le projet d\'investissement immobilier et identifiez tous les points de vigilance critiques qui pourraient compromettre l\'obtention du financement. Organisez votre analyse en catégories : 1) Risques financiers (ratio d\'endettement, capacité de remboursement, apport personnel), 2) Risques juridiques (servitudes, litiges, conformité), 3) Risques techniques (état du bien, travaux nécessaires, diagnostics), 4) Risques de marché (localisation, évolution des prix, demande locative). Pour chaque point, évaluez le niveau de criticité et proposez des solutions ou documents complémentaires.\n\nIMPORTANT: Structurez vos points de vigilance via POST sur l\'endpoint /api/workflow/vigilance-points/{projectUniqueId} avec le format suivant :\n\n{\n  "projectUniqueId": "{projectUniqueId}",\n  "vigilancePoints": [\n    {\n      "title": "Titre concis du point de vigilance",\n      "whyVigilance": "Explication détaillée de la raison de vigilance",\n      "riskLevel": "high|medium|low",\n      "category": "financial|technical|legal|market|operational|regulatory",\n      "potentialImpact": "Impact potentiel sur le projet",\n      "mitigationStrategies": ["Stratégie d\'atténuation 1", "Stratégie d\'atténuation 2"],\n      "monitoringRecommendations": ["Recommandation de suivi 1", "Recommandation de suivi 2"]\n    }\n  ]\n}',
+          prompt: '',
           order: 4,
           isActive: 1
         },
         {
           name: 'Rédaction d\'un message',
           description: 'Un message qui récapitule le projet et liste les documents manquants',
-          prompt: 'Rédigez un message de synthèse professionnel destiné au client qui : 1) Récapitule le projet en quelques phrases, 2) Présente les conclusions principales de l\'analyse, 3) Liste clairement les documents manquants requis, 4) Propose les prochaines étapes. Le ton doit être professionnel mais accessible.',
+          prompt: '',
           order: 5,
           isActive: 1
         }
@@ -514,6 +631,131 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
   }
 };
 
+// Endpoints structurés pour les analyses IA avec déclenchement automatique
+
+/**
+ * Endpoint pour recevoir les données consolidées de l'IA (Étape 2)
+ * @route POST /api/workflow/consolidated-data/:projectUniqueId
+ */
+export const receiveConsolidatedData = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = ConsolidatedDataPayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Trouver l'étape de consolidation des données (étape avec order = 2)
+    const workflowStep = await db
+      .select({
+        workflow: project_analysis_workflow,
+        step: analysis_steps
+      })
+      .from(project_analysis_workflow)
+      .leftJoin(analysis_steps, eq(project_analysis_workflow.stepId, analysis_steps.id))
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(analysis_steps.order, 2) // Étape avec order = 2 = consolidation des données
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape de workflow non trouvée. Initialisez d\'abord le workflow.',
+        code: 'WORKFLOW_STEP_NOT_FOUND'
+      });
+    }
+
+    // Préparer les données à insérer/mettre à jour
+    const consolidatedDataToInsert = {
+      projectId: project[0].id,
+      // Données Financières
+      financialAcquisitionPrice: validatedData.consolidatedData.financial?.acquisitionPrice?.toString(),
+      financialWorksCost: validatedData.consolidatedData.financial?.worksCost?.toString(),
+      financialPlannedResalePrice: validatedData.consolidatedData.financial?.plannedResalePrice?.toString(),
+      financialPersonalContribution: validatedData.consolidatedData.financial?.personalContribution?.toString(),
+      // Données du Bien
+      propertyLivingArea: validatedData.consolidatedData.property?.livingArea?.toString(),
+      propertyMarketReferencePrice: validatedData.consolidatedData.property?.marketReferencePrice?.toString(),
+      propertyMonthlyRentExcludingTax: validatedData.consolidatedData.property?.monthlyRentExcludingTax?.toString(),
+      propertyPresoldUnits: validatedData.consolidatedData.property?.presoldUnits,
+      propertyTotalUnits: validatedData.consolidatedData.property?.totalUnits,
+      propertyPreMarketingRate: validatedData.consolidatedData.property?.preMarketingRate?.toString(),
+      // Données Porteur
+      carrierExperienceYears: validatedData.consolidatedData.carrier?.experienceYears,
+      carrierSuccessfulOperations: validatedData.consolidatedData.carrier?.successfulOperations,
+      carrierHasActiveLitigation: validatedData.consolidatedData.carrier?.hasActiveLitigation,
+      // Société Porteuse
+      companyYearsOfExistence: validatedData.consolidatedData.company?.yearsOfExistence,
+      companyNetResultYear1: validatedData.consolidatedData.company?.netResultYear1?.toString(),
+      companyNetResultYear2: validatedData.consolidatedData.company?.netResultYear2?.toString(),
+      companyNetResultYear3: validatedData.consolidatedData.company?.netResultYear3?.toString(),
+      companyTotalDebt: validatedData.consolidatedData.company?.totalDebt?.toString(),
+      companyEquity: validatedData.consolidatedData.company?.equity?.toString(),
+      companyDebtRatio: validatedData.consolidatedData.company?.debtRatio?.toString(),
+      updatedAt: new Date(),
+    };
+
+    // Insérer ou mettre à jour les données consolidées (upsert)
+    await db
+      .insert(consolidated_data)
+      .values({
+        ...consolidatedDataToInsert,
+        createdAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: consolidated_data.projectId,
+        set: consolidatedDataToInsert
+      });
+
+    // Mettre à jour l'étape du workflow
+    const updatedStep = await db
+      .update(project_analysis_workflow)
+      .set({
+        status: 'completed',
+        content: JSON.stringify(validatedData.consolidatedData),
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_workflow.id, workflowStep[0].workflow.id))
+      .returning();
+
+    // Déclencher automatiquement l'étape suivante (ordre 3 - Documents manquants)
+    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 2);
+    if (!triggerResult.success) {
+      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Données consolidées reçues et enregistrées avec succès',
+      workflowStepId: updatedStep[0].id,
+      data: validatedData.consolidatedData,
+      nextStepTriggered: triggerResult.success
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_CONSOLIDATED_DATA_ERROR'
+    });
+  }
+};
+
 // Endpoints spécifiques pour chaque étape (appelés par Manus)
 
 /**
@@ -710,99 +952,10 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
       .where(eq(project_analysis_workflow.id, workflowStep[0].workflow.id))
       .returning();
 
-    // Déclencher automatiquement l'étape suivante (ordre 2)
-    try {
-      const nextStep = await db
-        .select({
-          workflow: project_analysis_workflow,
-          step: analysis_steps
-        })
-        .from(project_analysis_workflow)
-        .leftJoin(analysis_steps, eq(project_analysis_workflow.stepId, analysis_steps.id))
-        .where(
-          and(
-            eq(project_analysis_workflow.projectId, project[0].id),
-            eq(analysis_steps.order, 2) // Étape suivante avec order = 2
-          )
-        )
-        .limit(1);
-
-      if (nextStep.length > 0 && nextStep[0].step) {
-        // Marquer l'étape suivante comme en cours
-        await db
-          .update(project_analysis_workflow)
-          .set({
-            status: 'in_progress',
-            startedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
-        
-        console.log(`✅ Étape suivante (${nextStep[0].step.name}) marquée comme en cours`);
-
-        // Récupérer l'URL de conversation de l'étape précédente (étape 1 qui vient d'être complétée)
-        let previousStepConversationUrl = workflowStep[0].workflow.manusConversationUrl;
-        
-        // Si pas d'URL dans le workflow, chercher dans la table conversations_with_ai
-        if (!previousStepConversationUrl) {
-          try {
-            const latestConversation = await db
-              .select({
-                url: conversations_with_ai.url
-              })
-              .from(conversations_with_ai)
-              .innerJoin(sessions, eq(conversations_with_ai.sessionId, sessions.id))
-              .where(eq(sessions.projectId, project[0].id))
-              .orderBy(desc(conversations_with_ai.createdAt))
-              .limit(1);
-              
-            if (latestConversation.length > 0) {
-              previousStepConversationUrl = latestConversation[0].url;
-              console.log(`🔍 URL de conversation récupérée depuis conversations_with_ai: ${previousStepConversationUrl}`);
-            }
-          } catch (error) {
-            console.warn('⚠️ Impossible de récupérer l\'URL de conversation depuis conversations_with_ai:', error);
-          }
-        }
-
-        // Envoyer le prompt de l'étape suivante à l'IA avec l'URL de conversation
-        const aiResult = await sendPromptToAI(
-          nextStep[0].step.prompt,
-          projectUniqueId,
-          nextStep[0].workflow.stepId,
-          nextStep[0].step.name,
-          previousStepConversationUrl || undefined
-        );
-
-        if (aiResult.success) {
-          console.log(`🎉 Prompt de l'étape "${nextStep[0].step.name}" envoyé avec succès à l'IA`);
-          
-          // Sauver l'URL de conversation (mise à jour ou nouvelle)
-          if (aiResult.conversationUrl) {
-            await db
-              .update(project_analysis_workflow)
-              .set({
-                manusConversationUrl: aiResult.conversationUrl,
-                updatedAt: new Date(),
-              })
-              .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
-          }
-        } else {
-          console.error(`❌ Échec de l'envoi du prompt pour l'étape "${nextStep[0].step.name}":`, aiResult.error);
-          
-          // Marquer l'étape comme échouée
-          await db
-            .update(project_analysis_workflow)
-            .set({
-              status: 'failed',
-              updatedAt: new Date(),
-            })
-            .where(eq(project_analysis_workflow.id, nextStep[0].workflow.id));
-        }
-      }
-    } catch (error) {
-      console.warn('⚠️ Impossible de déclencher l\'étape suivante:', error);
-      // Ne pas faire échouer la réponse principale
+    // Déclencher automatiquement l'étape suivante (ordre 2 - Consolidation des données)
+    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 1);
+    if (!triggerResult.success) {
+      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
     }
 
     res.status(200).json({
@@ -815,74 +968,6 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'RECEIVE_ANALYSIS_MACRO_ERROR'
-    });
-  }
-};
-
-/**
- * Endpoint pour recevoir l'analyse détaillée de l'IA (Étape 2)
- * @route POST /api/workflow/analysis-description/:projectUniqueId
- */
-export const receiveAnalysisDescription = async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { projectUniqueId } = req.params;
-    const validatedData = AnalysisDescriptionPayloadSchema.parse({ 
-      ...req.body, 
-      projectUniqueId 
-    });
-
-    const project = await db
-      .select()
-      .from(projects)
-      .where(eq(projects.projectUniqueId, projectUniqueId))
-      .limit(1);
-
-    if (project.length === 0) {
-      return res.status(404).json({ 
-        error: 'Projet non trouvé',
-        code: 'PROJECT_NOT_FOUND'
-      });
-    }
-
-    const workflowStep = await db
-      .select()
-      .from(project_analysis_workflow)
-      .where(
-        and(
-          eq(project_analysis_workflow.projectId, project[0].id),
-          eq(project_analysis_workflow.stepId, 2) // Étape 2 = description détaillée
-        )
-      )
-      .limit(1);
-
-    if (workflowStep.length === 0) {
-      return res.status(404).json({ 
-        error: 'Étape de workflow non trouvée',
-        code: 'WORKFLOW_STEP_NOT_FOUND'
-      });
-    }
-
-    const updatedStep = await db
-      .update(project_analysis_workflow)
-      .set({
-        status: 'completed',
-        content: JSON.stringify(validatedData.detailedAnalysis),
-        completedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(project_analysis_workflow.id, workflowStep[0].id))
-      .returning();
-
-    res.status(200).json({
-      success: true,
-      message: 'Analyse détaillée reçue et enregistrée avec succès',
-      workflowStepId: updatedStep[0].id,
-      data: validatedData.detailedAnalysis
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      error: (error as Error).message,
-      code: 'RECEIVE_ANALYSIS_DESCRIPTION_ERROR'
     });
   }
 };
@@ -953,6 +1038,12 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
         .where(eq(project_analysis_workflow.id, workflowStep[0].id));
     }
 
+    // Déclencher automatiquement l'étape suivante (ordre 4 - Points de vigilance)
+    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 3);
+    if (!triggerResult.success) {
+      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Documents manquants reçus et enregistrés avec succès',
@@ -962,7 +1053,8 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
         id: doc.id,
         name: doc.name,
         status: doc.status
-      }))
+      })),
+      nextStepTriggered: triggerResult.success
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1085,6 +1177,12 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
         .where(eq(project_analysis_workflow.id, workflowStep[0].id));
     }
 
+    // Déclencher automatiquement l'étape suivante (ordre 5 - Message final)
+    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 4);
+    if (!triggerResult.success) {
+      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+    }
+
     res.status(200).json({
       success: true,
       message: 'Points de vigilance reçus et enregistrés avec succès',
@@ -1095,12 +1193,106 @@ export const receiveVigilancePoints = async (req: Request, res: Response): Promi
         title: point.title,
         riskLevel: point.riskLevel,
         status: point.status
-      }))
+      })),
+      nextStepTriggered: triggerResult.success
     });
   } catch (error) {
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'RECEIVE_VIGILANCE_POINTS_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour recevoir le message final de l'IA (Étape 5)
+ * @route POST /api/workflow/final-message/:projectUniqueId
+ */
+export const receiveFinalMessage = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const validatedData = FinalMessagePayloadSchema.parse({ 
+      ...req.body, 
+      projectUniqueId 
+    });
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer la session la plus récente du projet pour y ajouter la conversation
+    const recentSession = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.projectId, project[0].id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(1);
+
+    if (recentSession.length === 0) {
+      return res.status(404).json({ 
+        error: 'Aucune session trouvée pour ce projet',
+        code: 'SESSION_NOT_FOUND'
+      });
+    }
+
+    // Créer une entrée dans la table conversations
+    await db
+      .insert(conversations)
+      .values({
+        sessionId: recentSession[0].id,
+        sessionDate: new Date(),
+        sender: 'IA',
+        message: validatedData.message,
+        attachments: [],
+      });
+
+    // Mettre à jour l'étape du workflow (étape 5)
+    const workflowStep = await db
+      .select()
+      .from(project_analysis_workflow)
+      .where(
+        and(
+          eq(project_analysis_workflow.projectId, project[0].id),
+          eq(project_analysis_workflow.stepId, 5) // Étape 5 = message final
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length > 0) {
+      await db
+        .update(project_analysis_workflow)
+        .set({
+          status: 'completed',
+          content: 'Message final créé dans conversations',
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_workflow.id, workflowStep[0].id));
+    }
+
+    // Pour l'étape 5 (dernière étape), pas de déclenchement automatique
+    // Le workflow est maintenant terminé
+    console.log(`✅ Workflow terminé pour le projet: ${projectUniqueId}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Message final reçu et enregistré dans les conversations avec succès. Workflow terminé.',
+      workflowStepId: workflowStep.length > 0 ? workflowStep[0].id : null,
+      workflowCompleted: true
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_FINAL_MESSAGE_ERROR'
     });
   }
 }; 

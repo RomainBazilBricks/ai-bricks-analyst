@@ -216,6 +216,43 @@ export const api_configurations = pgTable('api_configurations', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Consolidated Data Table - Stores structured project data extracted by AI
+export const consolidated_data = pgTable('consolidated_data', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull().unique(),
+  
+  // Données Financières
+  financialAcquisitionPrice: decimal('financial_acquisition_price', { precision: 15, scale: 2 }),
+  financialWorksCost: decimal('financial_works_cost', { precision: 15, scale: 2 }),
+  financialPlannedResalePrice: decimal('financial_planned_resale_price', { precision: 15, scale: 2 }),
+  financialPersonalContribution: decimal('financial_personal_contribution', { precision: 15, scale: 2 }),
+  
+  // Données du Bien
+  propertyLivingArea: decimal('property_living_area', { precision: 10, scale: 2 }),
+  propertyMarketReferencePrice: decimal('property_market_reference_price', { precision: 15, scale: 2 }),
+  propertyMonthlyRentExcludingTax: decimal('property_monthly_rent_excluding_tax', { precision: 10, scale: 2 }),
+  propertyPresoldUnits: integer('property_presold_units'),
+  propertyTotalUnits: integer('property_total_units'),
+  propertyPreMarketingRate: decimal('property_pre_marketing_rate', { precision: 5, scale: 2 }),
+  
+  // Données Porteur
+  carrierExperienceYears: integer('carrier_experience_years'),
+  carrierSuccessfulOperations: integer('carrier_successful_operations'),
+  carrierHasActiveLitigation: boolean('carrier_has_active_litigation'),
+  
+  // Société Porteuse
+  companyYearsOfExistence: integer('company_years_of_existence'),
+  companyNetResultYear1: decimal('company_net_result_year_1', { precision: 15, scale: 2 }),
+  companyNetResultYear2: decimal('company_net_result_year_2', { precision: 15, scale: 2 }),
+  companyNetResultYear3: decimal('company_net_result_year_3', { precision: 15, scale: 2 }),
+  companyTotalDebt: decimal('company_total_debt', { precision: 15, scale: 2 }),
+  companyEquity: decimal('company_equity', { precision: 15, scale: 2 }),
+  companyDebtRatio: decimal('company_debt_ratio', { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Zod Schemas for API Validation
 
 // Schema for POST /projects (creating project with file URLs)
@@ -499,6 +536,54 @@ export const VigilancePointsPayloadSchema = z.object({
     potentialImpact: z.string().min(1, 'Potential impact is required'),
     recommendations: z.array(z.string().min(1)),
   })).min(1, 'At least one vigilance point is required'),
+});
+
+// Schema for consolidated data payload (Step 0 - before analysis)
+export const ConsolidatedDataPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  consolidatedData: z.object({
+    // Données Financières - toutes optionnelles car peuvent ne pas être trouvées
+    financial: z.object({
+      acquisitionPrice: z.number().optional(),
+      worksCost: z.number().optional(),
+      plannedResalePrice: z.number().optional(),
+      personalContribution: z.number().optional(),
+    }).optional(),
+    
+    // Données du Bien - toutes optionnelles
+    property: z.object({
+      livingArea: z.number().optional(),
+      marketReferencePrice: z.number().optional(),
+      monthlyRentExcludingTax: z.number().optional(),
+      presoldUnits: z.number().int().optional(),
+      totalUnits: z.number().int().optional(),
+      preMarketingRate: z.number().min(0).max(100).optional(),
+    }).optional(),
+    
+    // Données Porteur - toutes optionnelles
+    carrier: z.object({
+      experienceYears: z.number().int().nonnegative().optional(),
+      successfulOperations: z.number().int().nonnegative().optional(),
+      hasActiveLitigation: z.boolean().optional(),
+    }).optional(),
+    
+    // Société Porteuse - toutes optionnelles
+    company: z.object({
+      yearsOfExistence: z.number().int().nonnegative().optional(),
+      netResultYear1: z.number().optional(), // N-1
+      netResultYear2: z.number().optional(), // N-2
+      netResultYear3: z.number().optional(), // N-3
+      totalDebt: z.number().optional(),
+      equity: z.number().optional(),
+      debtRatio: z.number().min(0).max(100).optional(),
+    }).optional(),
+  }),
+});
+
+// Schema for final message payload (Step 5) - Simplifié
+export const FinalMessagePayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  message: z.string().min(1, 'Final message content is required'),
 });
 
 // Types for responses
