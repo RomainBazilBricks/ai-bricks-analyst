@@ -15,6 +15,7 @@ import {
   project_analysis_workflow
 } from '@/db/schema';
 import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
+import { uploadFileFromUrl } from '@/lib/s3';
 import type { 
   CreateProjectInput, 
   ProjectResponse, 
@@ -89,25 +90,65 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
 
     console.log(`📝 Nouvelle session créée: ${newSession[0].id}`);
 
-    // Ajouter les fichiers à la nouvelle session
+    // Ajouter les fichiers à la nouvelle session avec conversion S3
     if (projectData.fileUrls && projectData.fileUrls.length > 0) {
-      const documentsToInsert = projectData.fileUrls.map((url, index) => ({
-        sessionId: newSession[0].id,
-        fileName: `Document ${index + 1}`, // Nom par défaut, peut être amélioré
-        url: url,
-        hash: `hash-${Date.now()}-${index}`, // Hash temporaire, peut être amélioré
-        mimeType: 'application/pdf', // Type par défaut, peut être détecté
-        size: 0, // Taille par défaut, peut être récupérée
-        status: 'UPLOADED' as const,
-        uploadedAt: new Date(),
-      }));
+      const documentsToInsert = [];
+      
+      for (let index = 0; index < projectData.fileUrls.length; index++) {
+        const bubbleUrl = projectData.fileUrls[index];
+        
+        try {
+          console.log(`📥 Conversion S3 du document ${index + 1}/${projectData.fileUrls.length}: ${bubbleUrl}`);
+          
+          // Convertir l'URL Bubble vers S3
+          const s3Result = await uploadFileFromUrl(
+            bubbleUrl,
+            projectData.projectUniqueId,
+            `Document_${index + 1}`
+          );
+          
+          documentsToInsert.push({
+            sessionId: newSession[0].id,
+            fileName: s3Result.fileName,
+            url: s3Result.s3Url, // ✅ URL S3 au lieu de Bubble
+            hash: s3Result.hash,
+            mimeType: s3Result.mimeType,
+            size: s3Result.size,
+            status: 'PROCESSED' as const, // Statut PROCESSED car converti vers S3
+            uploadedAt: new Date(),
+          });
+          
+          console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
+          
+        } catch (error) {
+          console.error(`❌ Erreur conversion S3 document ${index + 1}:`, error);
+          
+          // En cas d'erreur, stocker l'URL Bubble avec statut ERROR
+          documentsToInsert.push({
+            sessionId: newSession[0].id,
+            fileName: `Document_${index + 1}_ERROR`,
+            url: bubbleUrl, // URL Bubble en fallback
+            hash: `error-${Date.now()}-${index}`,
+            mimeType: 'application/pdf',
+            size: 0,
+            status: 'ERROR' as const,
+            uploadedAt: new Date(),
+          });
+        }
+      }
 
-      const insertedDocuments = await db
-        .insert(documents)
-        .values(documentsToInsert)
-        .returning();
+      if (documentsToInsert.length > 0) {
+        const insertedDocuments = await db
+          .insert(documents)
+          .values(documentsToInsert)
+          .returning();
 
-      console.log(`📎 ${insertedDocuments.length} fichier(s) ajouté(s) à la session ${newSession[0].id}`);
+        const successCount = insertedDocuments.filter(doc => doc.status === 'PROCESSED').length;
+        const errorCount = insertedDocuments.filter(doc => doc.status === 'ERROR').length;
+        
+        console.log(`📎 ${insertedDocuments.length} fichier(s) ajouté(s) à la session ${newSession[0].id}`);
+        console.log(`✅ ${successCount} converti(s) vers S3, ❌ ${errorCount} en erreur`);
+      }
     }
 
     const response: ProjectResponse = {
