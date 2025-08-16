@@ -85,6 +85,13 @@
       "when": 1755164210662,
       "tag": "0011_clean_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1755345158879,
+      "tag": "0012_conscious_mentallo",
+      "breakpoints": true
     }
   ]
 }

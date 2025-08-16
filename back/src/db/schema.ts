@@ -534,38 +534,38 @@ export const ConsolidatedDataPayloadSchema = z.object({
   consolidatedData: z.object({
     // Données Financières - toutes optionnelles car peuvent ne pas être trouvées
     financial: z.object({
-      acquisitionPrice: z.number().optional(),
-      worksCost: z.number().optional(),
-      plannedResalePrice: z.number().optional(),
-      personalContribution: z.number().optional(),
+      acquisitionPrice: z.number().nullable().optional(),
+      worksCost: z.number().nullable().optional(),
+      plannedResalePrice: z.number().nullable().optional(),
+      personalContribution: z.number().nullable().optional(),
     }).optional(),
     
     // Données du Bien - toutes optionnelles
     property: z.object({
-      livingArea: z.number().optional(),
-      marketReferencePrice: z.number().optional(),
-      monthlyRentExcludingTax: z.number().optional(),
-      presoldUnits: z.number().int().optional(),
-      totalUnits: z.number().int().optional(),
-      preMarketingRate: z.number().min(0).max(100).optional(),
+      livingArea: z.number().nullable().optional(),
+      marketReferencePrice: z.number().nullable().optional(),
+      monthlyRentExcludingTax: z.number().nullable().optional(),
+      presoldUnits: z.number().int().nullable().optional(),
+      totalUnits: z.number().int().nullable().optional(),
+      preMarketingRate: z.number().min(0).max(100).nullable().optional(),
     }).optional(),
     
     // Données Porteur - toutes optionnelles
     carrier: z.object({
-      experienceYears: z.number().int().nonnegative().optional(),
-      successfulOperations: z.number().int().nonnegative().optional(),
-      hasActiveLitigation: z.boolean().optional(),
+      experienceYears: z.number().int().nonnegative().nullable().optional(),
+      successfulOperations: z.number().int().nonnegative().nullable().optional(),
+      hasActiveLitigation: z.boolean().nullable().optional(),
     }).optional(),
     
     // Société Porteuse - toutes optionnelles
     company: z.object({
-      yearsOfExistence: z.number().int().nonnegative().optional(),
-      netResultYear1: z.number().optional(), // N-1
-      netResultYear2: z.number().optional(), // N-2
-      netResultYear3: z.number().optional(), // N-3
-      totalDebt: z.number().optional(),
-      equity: z.number().optional(),
-      debtRatio: z.number().min(0).max(100).optional(),
+      yearsOfExistence: z.number().int().nonnegative().nullable().optional(),
+      netResultYear1: z.number().nullable().optional(), // N-1
+      netResultYear2: z.number().nullable().optional(), // N-2
+      netResultYear3: z.number().nullable().optional(), // N-3
+      totalDebt: z.number().nullable().optional(),
+      equity: z.number().nullable().optional(),
+      debtRatio: z.number().min(0).max(100).nullable().optional(),
     }).optional(),
   }),
 });
