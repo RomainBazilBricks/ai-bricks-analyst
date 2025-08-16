@@ -40,33 +40,28 @@ import type {
  */
 const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
   try {
-    // URL de l'API externe (à configurer selon l'environnement)
-    const aiApiUrl = process.env.AI_INTERFACE_URL || 'https://64239c9ce527.ngrok-free.app';
+    // URL de base de notre propre API (même chemin que le frontend)
+    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
     
     console.log(`🚀 Envoi automatique du prompt à l'IA pour l'étape: ${stepName}`);
     if (conversationUrl) {
       console.log(`🔗 Continuation de la conversation: ${conversationUrl}`);
     }
     
-    // Générer l'URL de la page des documents si le placeholder {documentListUrl} est présent
-    let documentListUrl = '';
-    if (prompt.includes('{documentListUrl}')) {
-      // URL de base de l'API (à configurer selon l'environnement)
-      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
-      documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
-    }
-    
     // Remplacer les placeholders dans le prompt
     let processedPrompt = prompt.replace(/{projectUniqueId}/g, projectUniqueId);
-    processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
     
-    // Préparer le payload avec l'URL de conversation si disponible
+    // Remplacer {documentListUrl} par l'URL de la page des documents
+    if (processedPrompt.includes('{documentListUrl}')) {
+      const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+      processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+    }
+    
+    // Préparer le payload (même format que le frontend)
     const payload: any = {
       message: processedPrompt,
       platform: 'manus',
       projectUniqueId,
-      stepId,
-      stepName,
     };
 
     // Ajouter conversation_url si disponible pour continuer la même session
@@ -74,31 +69,32 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
       payload.conversation_url = conversationUrl;
     }
     
-    const response = await axios.post(`${aiApiUrl}/send-message`, payload, {
+    // Utiliser notre propre API external-tools (même chemin que le frontend)
+    const response = await axios.post(`${baseUrl}/api/external-tools/send-message`, payload, {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 10000, // 10 secondes de timeout
+      timeout: 30000, // 30 secondes de timeout pour les tâches IA
     });
 
-    if (response.data.success !== false) {
+    if (response.data && response.data.conversation_url) {
       console.log(`✅ Prompt envoyé avec succès à l'IA pour l'étape: ${stepName}`);
       return {
         success: true,
         conversationUrl: response.data.conversation_url
       };
     } else {
-      console.error(`❌ Erreur de l'IA pour l'étape ${stepName}:`, response.data.message);
+      console.error(`❌ Réponse inattendue de l'API pour l'étape ${stepName}:`, response.data);
       return {
         success: false,
-        error: response.data.message || 'Erreur inconnue de l\'IA'
+        error: 'Réponse inattendue de l\'API'
       };
     }
   } catch (error: any) {
     console.error(`❌ Erreur lors de l'envoi du prompt à l'IA pour l'étape ${stepName}:`, error.message);
     return {
       success: false,
-      error: error.message || 'Erreur de connexion à l\'IA'
+      error: error.message || 'Erreur de connexion à l\'API'
     };
   }
 };
