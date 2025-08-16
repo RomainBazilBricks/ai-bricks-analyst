@@ -12,7 +12,8 @@ import {
   missing_documents,
   vigilance_points,
   conversations,
-  project_analysis_workflow
+  project_analysis_workflow,
+  consolidated_data
 } from '@/db/schema';
 import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
 import { uploadFileFromUrl, s3Client } from '@/lib/s3';
@@ -623,6 +624,74 @@ export const downloadDocument = async (req: Request, res: Response): Promise<any
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'DOCUMENT_DOWNLOAD_ERROR'
+    });
+  }
+};
+
+/**
+ * Récupère les données consolidées d'un projet
+ * @route GET /api/projects/:projectUniqueId/consolidated-data
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {ConsolidatedData} Données consolidées du projet
+ */
+export const getConsolidatedData = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id, projectName: projects.projectName })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer les données consolidées
+    const consolidatedData = await db
+      .select()
+      .from(consolidated_data)
+      .where(eq(consolidated_data.projectId, project[0].id))
+      .limit(1);
+
+    if (consolidatedData.length === 0) {
+      return res.status(404).json({ 
+        error: 'Consolidated data not found for this project',
+        code: 'CONSOLIDATED_DATA_NOT_FOUND'
+      });
+    }
+
+    // Convertir les types numériques
+    const formattedData = {
+      ...consolidatedData[0],
+      financialAcquisitionPrice: consolidatedData[0].financialAcquisitionPrice ? parseFloat(consolidatedData[0].financialAcquisitionPrice) : null,
+      financialWorksCost: consolidatedData[0].financialWorksCost ? parseFloat(consolidatedData[0].financialWorksCost) : null,
+      financialPlannedResalePrice: consolidatedData[0].financialPlannedResalePrice ? parseFloat(consolidatedData[0].financialPlannedResalePrice) : null,
+      financialPersonalContribution: consolidatedData[0].financialPersonalContribution ? parseFloat(consolidatedData[0].financialPersonalContribution) : null,
+      propertyLivingArea: consolidatedData[0].propertyLivingArea ? parseFloat(consolidatedData[0].propertyLivingArea) : null,
+      propertyMarketReferencePrice: consolidatedData[0].propertyMarketReferencePrice ? parseFloat(consolidatedData[0].propertyMarketReferencePrice) : null,
+      propertyMonthlyRentExcludingTax: consolidatedData[0].propertyMonthlyRentExcludingTax ? parseFloat(consolidatedData[0].propertyMonthlyRentExcludingTax) : null,
+      propertyPreMarketingRate: consolidatedData[0].propertyPreMarketingRate ? parseFloat(consolidatedData[0].propertyPreMarketingRate) : null,
+      companyNetResultYear1: consolidatedData[0].companyNetResultYear1 ? parseFloat(consolidatedData[0].companyNetResultYear1) : null,
+      companyNetResultYear2: consolidatedData[0].companyNetResultYear2 ? parseFloat(consolidatedData[0].companyNetResultYear2) : null,
+      companyNetResultYear3: consolidatedData[0].companyNetResultYear3 ? parseFloat(consolidatedData[0].companyNetResultYear3) : null,
+      companyTotalDebt: consolidatedData[0].companyTotalDebt ? parseFloat(consolidatedData[0].companyTotalDebt) : null,
+      companyEquity: consolidatedData[0].companyEquity ? parseFloat(consolidatedData[0].companyEquity) : null,
+      companyDebtRatio: consolidatedData[0].companyDebtRatio ? parseFloat(consolidatedData[0].companyDebtRatio) : null,
+    };
+
+    res.json(formattedData);
+    
+  } catch (error) {
+    console.error('Error fetching consolidated data:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_CONSOLIDATED_DATA_ERROR'
     });
   }
 };

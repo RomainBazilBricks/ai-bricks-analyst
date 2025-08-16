@@ -4,6 +4,7 @@ import { useGetProjectById, useDeleteProject } from "@/api/projects";
 import { useSendMessageToTool } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
 import { ProjectDocuments } from "@/components/project-documents";
+import { ConsolidatedData } from "@/components/consolidated-data";
 
 import { useGetWorkflowStatus } from "@/api/workflow";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -498,6 +499,11 @@ export const ProjectDetailPage = () => {
           projectUniqueId={projectUniqueId!} 
           latestConversationUrl={effectiveLatestConversation?.url}
         />
+      </div>
+
+      {/* Données consolidées */}
+      <div className="mb-8">
+        <ConsolidatedData projectUniqueId={projectUniqueId!} />
       </div>
 
       {/* Contenu principal */}

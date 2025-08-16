@@ -7,6 +7,7 @@ import {
   getProjectDocumentUrls,
   getProjectDocumentsListPage,
   downloadDocument,
+  getConsolidatedData,
   deleteProject
 } from '@/controllers/projects.controller';
 
@@ -65,6 +66,12 @@ router.get('/:projectUniqueId/documents-list', getProjectDocumentsListPage);
  * @description Télécharge un document directement depuis S3 (endpoint proxy pour Manus)
  */
 router.get('/:projectUniqueId/documents/:documentId/download', downloadDocument);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/consolidated-data
+ * @description Récupère les données consolidées d'un projet
+ */
+router.get('/:projectUniqueId/consolidated-data', getConsolidatedData);
 
 /**
  * @route POST /api/projects/delete
