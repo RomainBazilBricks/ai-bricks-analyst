@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useGetProjectConversations, useCreateDraft, type ConversationMessage } from "@/api/conversations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RichEditor } from "@/components/ui/rich-editor";
@@ -15,7 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  RefreshCw
+
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 
@@ -76,7 +76,7 @@ const ConversationHistory = ({ conversations }: { conversations: ConversationMes
     <div className="space-y-3">
       {Object.entries(groupedConversations).map(([dateKey, messages]) => {
         const isExpanded = expandedSessions.has(dateKey);
-        const latestMessage = messages[0]; // Plus récent en premier
+        // const latestMessage = messages[0]; // Plus récent en premier
 
         return (
           <div key={dateKey} className="border border-gray-200 rounded-lg overflow-hidden">
@@ -154,19 +154,18 @@ const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: str
   React.useEffect(() => {
     if (latestDraft && !hasInitialized) {
       const htmlContent = markdownToHtml(latestDraft.message);
-      setDraftMessage(htmlContent);
+      if (typeof htmlContent === 'string') {
+        setDraftMessage(htmlContent);
+      } else {
+        htmlContent.then((html) => setDraftMessage(html));
+      }
       setHasInitialized(true);
     }
   }, [latestDraft, hasInitialized]);
 
 
 
-  const resetToOriginalDraft = () => {
-    if (latestDraft?.message) {
-      const htmlContent = markdownToHtml(latestDraft.message);
-      setDraftMessage(htmlContent);
-    }
-  };
+
 
   const { mutateAsync: createDraft, isPending } = useCreateDraft(projectUniqueId, {
     onSuccess: () => {
@@ -223,7 +222,7 @@ const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: str
 };
 
 export const ProjectConversations = ({ projectUniqueId }: ProjectConversationsProps) => {
-  const { data: conversations, isLoading, isError, error } = useGetProjectConversations(projectUniqueId);
+  const { data: conversations, isLoading, isError } = useGetProjectConversations(projectUniqueId);
 
   if (isLoading) {
     return (

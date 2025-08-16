@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   AlertTriangle,
   CheckCircle,
-  Clock,
+
   XCircle,
   Check,
   X,
@@ -24,14 +24,7 @@ interface VigilancePointsProps {
 
 
 
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case 'resolved': return <CheckCircle className="h-4 w-4 text-green-600" />;
-    case 'irrelevant': return <XCircle className="h-4 w-4 text-gray-500" />;
-    case 'pending': return <Clock className="h-4 w-4 text-orange-600" />;
-    default: return <Clock className="h-4 w-4 text-gray-600" />;
-  }
-};
+
 
 const VigilancePointRow = ({ point, projectUniqueId }: { 
   point: VigilancePoint; 
@@ -49,7 +42,7 @@ const VigilancePointRow = ({ point, projectUniqueId }: {
       setSelectedStatus(null);
       setComment('');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('❌ Vigilance Point Mutation error:', error);
     }
   });
@@ -187,7 +180,7 @@ const VigilancePointRow = ({ point, projectUniqueId }: {
 };
 
 export const VigilancePoints = ({ projectUniqueId }: VigilancePointsProps) => {
-  const { data: vigilancePoints, isLoading, isError, error } = useGetVigilancePoints(projectUniqueId);
+  const { data: vigilancePoints, isLoading, isError } = useGetVigilancePoints(projectUniqueId);
   const [showResolved, setShowResolved] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
 

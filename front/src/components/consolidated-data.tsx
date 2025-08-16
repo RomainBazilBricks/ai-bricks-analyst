@@ -1,4 +1,4 @@
-import { useGetConsolidatedData, type ConsolidatedData } from "@/api/consolidated-data";
+import { useGetConsolidatedData } from "@/api/consolidated-data";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -8,7 +8,7 @@ import {
   User, 
   Building2,
   TrendingUp,
-  TrendingDown,
+
   AlertTriangle,
   CheckCircle,
   XCircle
@@ -46,8 +46,8 @@ const getBooleanIcon = (value: boolean | null) => {
   return value ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle className="h-4 w-4 text-green-500" />;
 };
 
-export const ConsolidatedData = ({ projectUniqueId }: ConsolidatedDataProps) => {
-  const { data: consolidatedData, isLoading, isError, error } = useGetConsolidatedData(projectUniqueId);
+export const ConsolidatedDataComponent = ({ projectUniqueId }: ConsolidatedDataProps) => {
+  const { data: consolidatedData, isLoading, isError } = useGetConsolidatedData(projectUniqueId);
 
   if (isLoading) {
     return (

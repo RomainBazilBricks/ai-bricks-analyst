@@ -1,4 +1,4 @@
-import { useFetcher, useMutator } from "@/api/api";
+import { useFetcher } from "@/api/api";
 import { useMutation } from "@tanstack/react-query";
 
 /**

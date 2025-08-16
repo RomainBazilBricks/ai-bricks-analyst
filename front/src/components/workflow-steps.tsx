@@ -18,7 +18,7 @@ import {
   MessageCircle,
   Code,
   Loader2,
-  ExternalLink,
+
   FileText
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
@@ -402,12 +402,12 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0">
-                        {getStepIcon(step.step.order)}
+                        {getStepIcon((step as any).step?.order || (step as any).order)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <h4 className="font-medium text-gray-900">
-                            {step.step.name}
+                            {(step as any).step?.name || (step as any).name}
                           </h4>
                           {getStatusIcon(step.status)}
                           {!hasWorkflow && (
@@ -447,7 +447,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                           </div>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">
-                          {step.step.description}
+                          {(step as any).step?.description || (step as any).description}
                         </p>
                         
                         {/* Affichage du prompt si pas de workflow initié */}
@@ -458,7 +458,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                             </summary>
                             <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
                               {(() => {
-                                let processedPrompt = step.step.prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+                                let processedPrompt = ((step as any).step?.prompt || (step as any).prompt).replace(/{projectUniqueId}/g, projectUniqueId);
                                 if (processedPrompt.includes('{documentListUrl}')) {
                                   const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
                                   const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;

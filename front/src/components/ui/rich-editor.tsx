@@ -62,7 +62,7 @@ export const RichEditor = ({
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[200px] p-4 [&_ul]:list-disc [&_ul]:ml-6 [&_li]:mb-1'
       },
       // Gérer le collage de Markdown
-      handlePaste: (view, event) => {
+      handlePaste: (_view, event) => {
         const text = event.clipboardData?.getData('text/plain')
         if (text) {
           // Détecter si c'est du Markdown simple

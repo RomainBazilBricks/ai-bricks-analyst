@@ -2,6 +2,7 @@ import { useFetcher, useMutator } from "@/api/api";
 import { useMutation } from "@tanstack/react-query";
 import type { 
   CreateAnalysisStepInput,
+  AnalysisStep,
   AnalysisStepResponse,
   InitiateWorkflowInput,
   ProjectWorkflowStatusResponse,
@@ -13,7 +14,7 @@ import type {
  * Hook pour récupérer toutes les étapes d'analyse actives
  */
 export const useGetAnalysisSteps = (options = {}) =>
-  useFetcher<undefined, AnalysisStepResponse[]>({
+  useFetcher<undefined, AnalysisStep[]>({
     key: ["workflow", "steps"],
     path: "/workflow/steps",
     options,

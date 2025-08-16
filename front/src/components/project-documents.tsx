@@ -158,7 +158,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
     if (!documentToDelete) return;
 
     try {
-      await deleteDocument();
+      await deleteDocument(undefined);
     } catch (error) {
       console.error('Erreur lors de la suppression:', error);
     }
@@ -170,7 +170,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
   const confirmDeleteAllDocuments = async () => {
     try {
-      await deleteAllDocuments();
+      await deleteAllDocuments(undefined);
     } catch (error) {
       console.error('Erreur lors de la suppression de tous les documents:', error);
     }

@@ -22,9 +22,9 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
-import type { AnalysisStepResponse, CreateAnalysisStepInput } from "@shared/types/projects";
+import type { AnalysisStep, CreateAnalysisStepInput } from "@shared/types/projects";
 
-interface EditingStep extends AnalysisStepResponse {
+interface EditingStep extends AnalysisStep {
   isEditing?: boolean;
   editedName?: string;
   editedDescription?: string;

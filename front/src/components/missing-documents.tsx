@@ -4,14 +4,14 @@ import { useGetMissingDocuments, useUpdateMissingDocumentStatus, type MissingDoc
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   FileX, 
   AlertTriangle,
   CheckCircle,
-  Clock,
+
   XCircle,
   Check,
   X,
@@ -23,63 +23,17 @@ interface MissingDocumentsProps {
   projectUniqueId: string;
 }
 
-const getPriorityColor = (priority: string) => {
-  switch (priority) {
-    case 'high': return 'bg-red-100 text-red-800 border-red-200';
-    case 'medium': return 'bg-orange-100 text-orange-800 border-orange-200';
-    case 'low': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
-};
 
-const getCategoryColor = (category: string) => {
-  switch (category) {
-    case 'legal': return 'bg-purple-100 text-purple-800 border-purple-200';
-    case 'financial': return 'bg-green-100 text-green-800 border-green-200';
-    case 'technical': return 'bg-blue-100 text-blue-800 border-blue-200';
-    case 'business': return 'bg-indigo-100 text-indigo-800 border-indigo-200';
-    case 'regulatory': return 'bg-pink-100 text-pink-800 border-pink-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
-};
 
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case 'resolved': return <CheckCircle className="h-3.5 w-3.5 text-green-600" />;
-    case 'irrelevant': return <XCircle className="h-3.5 w-3.5 text-gray-600" />;
-    case 'pending':
-    default: return <Clock className="h-3.5 w-3.5 text-orange-600" />;
-  }
-};
 
-const getCategoryLabel = (category: string) => {
-  switch (category) {
-    case 'legal': return 'Juridique';
-    case 'financial': return 'Financier';
-    case 'technical': return 'Technique';
-    case 'business': return 'Commercial';
-    case 'regulatory': return 'Réglementaire';
-    default: return category;
-  }
-};
 
-const getPriorityLabel = (priority: string) => {
-  switch (priority) {
-    case 'high': return 'Élevée';
-    case 'medium': return 'Moyenne';
-    case 'low': return 'Faible';
-    default: return priority;
-  }
-};
 
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'resolved': return 'Résolu';
-    case 'irrelevant': return 'Non pertinent';
-    case 'pending': return 'En attente';
-    default: return status;
-  }
-};
+
+
+
+
+
+
 
 const DocumentRow = ({ doc, projectUniqueId }: { 
   doc: MissingDocument; 
@@ -97,7 +51,7 @@ const DocumentRow = ({ doc, projectUniqueId }: {
       setSelectedStatus(null);
       setComment('');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('❌ Mutation error:', error);
     }
   });
@@ -211,7 +165,7 @@ const DocumentRow = ({ doc, projectUniqueId }: {
 };
 
 export const MissingDocuments = ({ projectUniqueId }: MissingDocumentsProps) => {
-  const { data: missingDocuments, isLoading, isError, error } = useGetMissingDocuments(projectUniqueId);
+  const { data: missingDocuments, isLoading, isError } = useGetMissingDocuments(projectUniqueId);
   const [showResolved, setShowResolved] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
 

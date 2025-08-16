@@ -4,7 +4,7 @@ import { useGetProjectById, useDeleteProject } from "@/api/projects";
 import { useSendMessageToTool } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
 import { ProjectDocuments } from "@/components/project-documents";
-import { ConsolidatedData } from "@/components/consolidated-data";
+import { ConsolidatedDataComponent } from "@/components/consolidated-data";
 import { MissingDocuments } from "@/components/missing-documents";
 import { VigilancePoints } from "@/components/vigilance-points";
 import { ProjectConversations } from "@/components/project-conversations";
@@ -743,7 +743,7 @@ export const ProjectDetailPage = () => {
 
             {/* 3. Données consolidées */}
             <div>
-              <ConsolidatedData projectUniqueId={projectUniqueId!} />
+              <ConsolidatedDataComponent projectUniqueId={projectUniqueId!} />
             </div>
 
             {/* Séparateur */}
