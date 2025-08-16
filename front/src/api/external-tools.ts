@@ -44,6 +44,13 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
   return useMutation<SendMessageResponse, Error, SendMessageInput>({
     mutationFn: async (data: SendMessageInput) => {
       console.log('🚀 Envoi du message vers:', toolUrl);
+      console.log('📦 Payload envoyé:', {
+        platform: data.platform,
+        projectUniqueId: data.projectUniqueId,
+        hasConversationUrl: !!data.conversation_url,
+        conversationUrl: data.conversation_url,
+        messageLength: data.message.length
+      });
       
       // Remplacer systématiquement les placeholders dans le message
       let processedMessage = data.message;
@@ -73,6 +80,7 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
           message: processedMessage, // Utiliser le message traité
           platform: data.platform,
           projectUniqueId: data.projectUniqueId, // Inclure l'ID du projet
+          ...(data.conversation_url && { conversation_url: data.conversation_url }), // Inclure l'URL de conversation si fournie
         }),
       });
 

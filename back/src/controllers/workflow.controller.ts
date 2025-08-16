@@ -227,43 +227,45 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
     
     if (existingSteps.length === 0) {
       // Créer les 5 étapes par défaut
-      const defaultSteps = [
-        {
-          name: 'Analyse globale',
-          description: 'Une analyse détaillée et approfondie du projet avec vue d\'ensemble',
-          prompt: '',
-          order: 1,
-          isActive: 1
-        },
-        {
-          name: 'Consolidation des données',
-          description: 'Récupère et structure toutes les données clés nécessaires à l\'analyse',
-          prompt: '',
-          order: 2,
-          isActive: 1
-        },
-        {
-          name: 'Récupération des documents manquants',
-          description: 'Liste des documents attendus en complément pour approfondir l\'analyse',
-          prompt: '',
-          order: 3,
-          isActive: 1
-        },
-        {
-          name: 'Points de vigilance',
-          description: 'Identification des risques critiques qui pourraient compromettre le financement',
-          prompt: '',
-          order: 4,
-          isActive: 1
-        },
-        {
-          name: 'Rédaction d\'un message',
-          description: 'Un message qui récapitule le projet et liste les documents manquants',
-          prompt: '',
-          order: 5,
-          isActive: 1
-        }
-      ];
+          // Les prompts sont gérés par l'interface AI et mis à jour via des scripts dédiés
+    // Ne pas définir de prompts ici pour éviter les confusions
+    const defaultSteps = [
+      {
+        name: 'Analyse globale',
+        description: 'Une analyse détaillée et approfondie du projet avec vue d\'ensemble',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 1,
+        isActive: 1
+      },
+      {
+        name: 'Consolidation des données',
+        description: 'Récupère et structure toutes les données clés nécessaires à l\'analyse',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 2,
+        isActive: 1
+      },
+      {
+        name: 'Récupération des documents manquants',
+        description: 'Liste des documents attendus en complément pour approfondir l\'analyse',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 3,
+        isActive: 1
+      },
+      {
+        name: 'Points de vigilance',
+        description: 'Identification des risques critiques qui pourraient compromettre le financement',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 4,
+        isActive: 1
+      },
+      {
+        name: 'Rédaction d\'un message',
+        description: 'Un message qui récapitule le projet et liste les documents manquants',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 5,
+        isActive: 1
+      }
+    ];
 
       await db.insert(analysis_steps).values(defaultSteps);
       console.log('✅ Étapes d\'analyse par défaut créées avec succès');
