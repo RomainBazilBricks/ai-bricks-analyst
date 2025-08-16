@@ -37,6 +37,11 @@ export enum DocumentStatus {
   IRRELEVANT = 'irrelevant',
 }
 
+export enum StrengthWeaknessType {
+  STRENGTH = 'strength',
+  WEAKNESS = 'weakness',
+}
+
 export enum ProjectTypology {
   MARCHAND_DE_BIEN = 'marchand_de_bien',
   PROJET_LOCATIF = 'projet_locatif',
@@ -54,6 +59,7 @@ export const sessionStatusEnum = pgEnum('session_status', ['open', 'closed']);
 export const fileStatusEnum = pgEnum('file_status', ['UPLOADED', 'PROCESSED', 'ERROR']);
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'resolved', 'irrelevant']);
 export const riskLevelEnum = pgEnum('risk_level', ['low', 'medium', 'high']);
+export const strengthWeaknessTypeEnum = pgEnum('strength_weakness_type', ['strength', 'weakness']);
 export const projectTypologyEnum = pgEnum('project_typology', ['marchand_de_bien', 'projet_locatif', 'projet_exploitation', 'promotion_immobiliere']);
 
 // Users Table - Represents administrators
@@ -146,12 +152,13 @@ export const missing_documents = pgTable('missing_documents', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Vigilance Points Table - Stores project alerts
-export const vigilance_points = pgTable('vigilance_points', {
+// Strengths and Weaknesses Table - Stores project strengths and weaknesses
+export const strengths_and_weaknesses = pgTable('strengths_and_weaknesses', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  type: strengthWeaknessTypeEnum('type').notNull(), // 'strength' or 'weakness'
   title: varchar('title', { length: 256 }).notNull(),
-  whyVigilance: text('why_vigilance').default('').notNull(), // Reason for vigilance, optional
+  description: text('description').default('').notNull(), // Description of the strength/weakness
   riskLevel: riskLevelEnum('risk_level').notNull(),
   potentialImpact: text('potential_impact').default('').notNull(), // Impact potential on project
   recommendations: jsonb('recommendations').default([]).notNull(), // Array of recommendation strings
@@ -340,21 +347,24 @@ export const UpdateMissingDocumentSchema = z.object({
   updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID'), // Required for updates
 });
 
-// Schema for POST /vigilance-points
-export const CreateVigilancePointSchema = z.object({
+// Schema for POST /strengths-and-weaknesses
+export const CreateStrengthWeaknessSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  type: z.enum(['strength', 'weakness']),
   title: z.string().min(1, 'Title is required'),
-  whyVigilance: z.string().optional(), // Optional for IA flexibility
+  description: z.string().optional(), // Optional for IA flexibility
   riskLevel: z.enum(['low', 'medium', 'high']),
+  potentialImpact: z.string().optional(), // Optional for IA flexibility
+  recommendations: z.array(z.string()).default([]), // Array of recommendation strings
   status: z.enum(['pending', 'resolved', 'irrelevant']).default('pending'),
   whyStatus: z.string().optional(), // Optional for IA flexibility
   updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID').optional(), // Optional for creation
 });
 
-// Schema for PATCH /vigilance-points/{id}
-export const UpdateVigilancePointSchema = z.object({
+// Schema for PATCH /strengths-and-weaknesses/{id}
+export const UpdateStrengthWeaknessSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  vigilancePointId: z.string().uuid('VigilancePointId must be a valid UUID'),
+  strengthWeaknessId: z.string().uuid('StrengthWeaknessId must be a valid UUID'),
   status: z.enum(['pending', 'resolved', 'irrelevant']).optional(),
   whyStatus: z.string().optional(),
   updatedBy: z.number().int().positive('UpdatedBy must be a valid user ID'), // Required for updates
@@ -528,16 +538,14 @@ export const MissingDocumentsPayloadSchema = z.object({
   })).min(1, 'At least one missing document is required'),
 });
 
-// Schema for vigilance points payload (Step 4)
-export const VigilancePointsPayloadSchema = z.object({
+// Schema for strengths and weaknesses payload (Step 4)
+export const StrengthsWeaknessesPayloadSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  vigilancePoints: z.array(z.object({
-    title: z.string().min(1, 'Vigilance point title is required'),
-    whyVigilance: z.string().min(1, 'Reason for vigilance is required'),
-    riskLevel: z.enum(['low', 'medium', 'high']),
-    potentialImpact: z.string().min(1, 'Potential impact is required'),
-    recommendations: z.array(z.string().min(1)),
-  })).min(1, 'At least one vigilance point is required'),
+  strengthsAndWeaknesses: z.array(z.object({
+    type: z.enum(['strength', 'weakness']),
+    title: z.string().min(1, 'Title is required'),
+    description: z.string().min(1, 'Description is required'),
+  })).min(1, 'At least one strength or weakness is required'),
 });
 
 // Schema for consolidated data payload (Step 0 - before analysis)
@@ -609,5 +617,5 @@ export type ProjectVisualizationType = {
     conversationsWithAi: { url: string; model: string }[];
   }[];
   missingDocuments: { name: string; whyMissing: string; status: string; whyStatus: string; updatedBy?: number }[];
-  vigilancePoints: { title: string; whyVigilance: string; riskLevel: string; status: string; whyStatus: string; updatedBy?: number }[];
+  strengthsAndWeaknesses: { type: string; title: string; description: string; riskLevel: string; potentialImpact: string; recommendations: string[]; status: string; whyStatus: string; updatedBy?: number }[];
 };
