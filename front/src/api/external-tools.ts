@@ -6,6 +6,7 @@ export type SendMessageInput = {
   message: string;
   platform: string;
   projectUniqueId?: string; // Optionnel pour la rétrocompatibilité
+  conversation_url?: string; // Optionnel pour continuer une conversation existante
 };
 
 export type SendMessageResponse = {

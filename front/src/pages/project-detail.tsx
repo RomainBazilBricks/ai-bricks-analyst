@@ -111,6 +111,15 @@ export const ProjectDetailPage = () => {
   
   // Utiliser la première conversation de la liste comme "dernière" si pas de réponse du hook latest
   const effectiveLatestConversation = latestAIConversation || (hasConversations ? allAIConversations[0] : null);
+  
+  // Debug: Logs pour vérifier la récupération de conversation
+  console.log('🔍 Debug conversation:', {
+    hasConversations,
+    allAIConversationsCount: allAIConversations?.length || 0,
+    latestAIConversation,
+    effectiveLatestConversation,
+    effectiveUrl: effectiveLatestConversation?.url
+  });
 
   // Hook pour supprimer le projet
   const { mutateAsync: deleteProject, isPending: isDeleting } = useDeleteProject({
