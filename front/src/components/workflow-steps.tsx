@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useGetWorkflowStatus, useInitiateWorkflow, useGetAnalysisSteps } from "@/api/workflow";
 import { useSendPromptToAI, type AIPromptRequest } from "@/api/ai-interface";
+import { useSendMessageToTool, type SendMessageInput } from "@/api/external-tools";
+import { useSaveAIConversation } from "@/api/ai-conversations";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -24,9 +26,10 @@ import { queryClient } from "@/api/query-config";
 
 interface WorkflowStepsProps {
   projectUniqueId: string;
+  latestConversationUrl?: string;
 }
 
-export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
+export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: WorkflowStepsProps) => {
   // États pour les prompts IA
   const [sendingPrompts, setSendingPrompts] = useState<Set<number>>(new Set());
   const [promptResults, setPromptResults] = useState<Map<number, { result: string; error?: string }>>(new Map());
@@ -64,8 +67,16 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
     },
   });
 
-  // Hook pour envoyer des prompts à l'IA
-  const { mutateAsync: sendPromptToAI } = useSendPromptToAI();
+  // Hook pour envoyer des prompts à l'IA (nouvelle version avec conversation_url)
+  const { mutateAsync: sendMessageToTool } = useSendMessageToTool();
+
+  // Hook pour sauvegarder les conversations AI
+  const { mutateAsync: saveAIConversation } = useSaveAIConversation({
+    onSuccess: () => {
+      // Invalider le cache des conversations AI pour forcer le rechargement
+      queryClient.invalidateQueries({ queryKey: ["ai-conversations"] });
+    },
+  });
 
   const handleInitiateWorkflow = async () => {
     if (!projectUniqueId) return;
@@ -104,25 +115,46 @@ export const WorkflowSteps = ({ projectUniqueId }: WorkflowStepsProps) => {
         processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
       }
       
-      const promptData: AIPromptRequest = {
-        prompt: processedPrompt,
+      // Utiliser l'API externe qui retourne une conversation_url
+      const messageData: SendMessageInput = {
+        message: processedPrompt,
+        platform: 'manus', // Défaut à manus pour les prompts IA
         projectUniqueId,
-        stepId,
-        stepName: step.step?.name || step.name,
+        // ✅ Ajouter conversation_url si disponible pour continuer la même conversation
+        ...(latestConversationUrl && { conversation_url: latestConversationUrl }),
       };
       
-      const response = await sendPromptToAI(promptData);
+      console.log('🚀 Envoi du prompt à l\'IA via external-tools API:', { 
+        stepId, 
+        stepName: step.step?.name || step.name,
+        hasConversationUrl: !!latestConversationUrl,
+        conversationUrl: latestConversationUrl 
+      });
+      const response = await sendMessageToTool(messageData);
       
-      // Stocker le résultat
+      // Stocker le résultat de l'IA
       setPromptResults(prev => {
         const newMap = new Map(prev);
-        if (response.success) {
-          newMap.set(stepId, { result: response.response });
-        } else {
-          newMap.set(stepId, { result: '', error: response.error });
-        }
+        newMap.set(stepId, { result: response.message || 'Réponse reçue' });
         return newMap;
       });
+      
+      // ✅ SAUVEGARDER AUTOMATIQUEMENT LA CONVERSATION SI UNE URL EST RETOURNÉE
+      if (response.conversation_url) {
+        try {
+          console.log('💾 Sauvegarde de la conversation AI:', response.conversation_url);
+          await saveAIConversation({
+            projectUniqueId,
+            conversationUrl: response.conversation_url,
+            model: 'manus',
+            taskId: response.task_id,
+          });
+          console.log('✅ Conversation AI sauvegardée avec succès');
+        } catch (saveError) {
+          console.error('❌ Erreur lors de la sauvegarde de la conversation:', saveError);
+          // Ne pas faire échouer le processus principal si la sauvegarde échoue
+        }
+      }
       
     } catch (error) {
       console.error('Erreur lors de l\'envoi du prompt à l\'IA:', error);

@@ -40,8 +40,8 @@ import type {
  */
 const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
   try {
-    // URL de base de notre propre API (même chemin que le frontend)
-    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+    // Utiliser directement l'API Python externe (même que le frontend)
+    const pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL || 'https://64239c9ce527.ngrok-free.app';
     
     console.log(`🚀 Envoi automatique du prompt à l'IA pour l'étape: ${stepName}`);
     if (conversationUrl) {
@@ -53,6 +53,7 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
     
     // Remplacer {documentListUrl} par l'URL de la page des documents
     if (processedPrompt.includes('{documentListUrl}')) {
+      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
       const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
       processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
     }
@@ -69,8 +70,10 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
       payload.conversation_url = conversationUrl;
     }
     
-    // Utiliser notre propre API external-tools (même chemin que le frontend)
-    const response = await axios.post(`${baseUrl}/api/external-tools/send-message`, payload, {
+    console.log(`📡 Envoi vers l'API Python: ${pythonApiUrl}`);
+    
+    // Utiliser directement l'API Python externe
+    const response = await axios.post(`${pythonApiUrl}/send-message`, payload, {
       headers: {
         'Content-Type': 'application/json',
       },
@@ -79,22 +82,23 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
 
     if (response.data && response.data.conversation_url) {
       console.log(`✅ Prompt envoyé avec succès à l'IA pour l'étape: ${stepName}`);
+      console.log(`🔗 URL conversation retournée: ${response.data.conversation_url}`);
       return {
         success: true,
         conversationUrl: response.data.conversation_url
       };
     } else {
-      console.error(`❌ Réponse inattendue de l'API pour l'étape ${stepName}:`, response.data);
+      console.error(`❌ Réponse inattendue de l'API Python pour l'étape ${stepName}:`, response.data);
       return {
         success: false,
-        error: 'Réponse inattendue de l\'API'
+        error: 'Réponse inattendue de l\'API Python'
       };
     }
   } catch (error: any) {
     console.error(`❌ Erreur lors de l'envoi du prompt à l'IA pour l'étape ${stepName}:`, error.message);
     return {
       success: false,
-      error: error.message || 'Erreur de connexion à l\'API'
+      error: error.message || 'Erreur de connexion à l\'API Python'
     };
   }
 };

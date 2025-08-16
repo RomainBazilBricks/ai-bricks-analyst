@@ -494,7 +494,10 @@ export const ProjectDetailPage = () => {
 
       {/* Workflow d'analyse IA */}
       <div className="mb-8">
-        <WorkflowSteps projectUniqueId={projectUniqueId!} />
+        <WorkflowSteps 
+          projectUniqueId={projectUniqueId!} 
+          latestConversationUrl={effectiveLatestConversation?.url}
+        />
       </div>
 
       {/* Contenu principal */}
