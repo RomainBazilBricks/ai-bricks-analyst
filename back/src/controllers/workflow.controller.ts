@@ -945,12 +945,21 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
       .update(project_analysis_workflow)
       .set({
         status: 'completed',
-        content: JSON.stringify(validatedData.macroAnalysis),
+        content: validatedData.macroAnalysis,
         completedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(project_analysis_workflow.id, workflowStep[0].workflow.id))
       .returning();
+
+    // Mettre à jour la description du projet avec l'analyse macro
+    await db
+      .update(projects)
+      .set({
+        description: validatedData.macroAnalysis,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project[0].id));
 
     // Déclencher automatiquement l'étape suivante (ordre 2 - Consolidation des données)
     const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 1);

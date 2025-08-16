@@ -467,17 +467,7 @@ export const GetApiConfigsQuerySchema = z.object({
 // Schema for macro analysis payload (Step 1)
 export const AnalysisMacroPayloadSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
-  macroAnalysis: z.object({
-    overallRisk: z.enum(['low', 'medium', 'high']),
-    marketPotential: z.enum(['low', 'medium', 'high']),
-    technicalFeasibility: z.enum(['low', 'medium', 'high']),
-    financialViability: z.enum(['low', 'medium', 'high']),
-    competitiveAdvantage: z.enum(['low', 'medium', 'high']),
-    summary: z.string().min(1, 'Summary is required'),
-    keyStrengths: z.array(z.string().min(1)).min(1, 'At least one strength is required'),
-    keyWeaknesses: z.array(z.string().min(1)).min(1, 'At least one weakness is required'),
-    recommendedActions: z.array(z.string().min(1)).min(1, 'At least one action is required'),
-  }),
+  macroAnalysis: z.string().min(1, 'Macro analysis content is required')
 });
 
 // Schema for detailed analysis payload (Step 2)
