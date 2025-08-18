@@ -534,7 +534,7 @@ export const MissingDocumentsPayloadSchema = z.object({
   missingDocuments: z.array(z.object({
     name: z.string().min(1, 'Document name is required'),
     whyMissing: z.string().min(1, 'Reason for missing document is required'),
-    impactOnProject: z.string().min(1, 'Impact on project is required'),
+    impactOnProject: z.string().optional(), // Optionnel car Manus n'envoie pas toujours ce champ
   })).min(1, 'At least one missing document is required'),
 });
 

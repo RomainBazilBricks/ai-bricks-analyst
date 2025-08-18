@@ -22,7 +22,8 @@ import {
   FinalMessagePayloadSchema,
   ConsolidatedDataPayloadSchema,
   consolidated_data,
-  WorkflowStatus
+  WorkflowStatus,
+  api_configurations
 } from '@/db/schema';
 import { eq, and, asc, desc } from 'drizzle-orm';
 import type { 
@@ -40,8 +41,26 @@ import type {
  */
 const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
   try {
-    // Utiliser directement l'API Python externe (même que le frontend)
-    const pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL || 'https://64239c9ce527.ngrok-free.app';
+    // Récupérer la configuration API Python active
+    let pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL;
+    
+    if (!pythonApiUrl) {
+      try {
+        // Récupérer la configuration depuis la base de données
+        const [config] = await db
+          .select()
+          .from(api_configurations)
+          .where(and(
+            eq(api_configurations.name, 'Python API'),
+            eq(api_configurations.isActive, true)
+          ));
+        
+        pythonApiUrl = config?.url || 'http://localhost:8000';
+      } catch (configError) {
+        console.warn('⚠️ Impossible de récupérer la configuration API Python, utilisation de l\'URL par défaut');
+        pythonApiUrl = 'http://localhost:8000';
+      }
+    }
     
     console.log(`🚀 Envoi automatique du prompt à l'IA pour l'étape: ${stepName}`);
     if (conversationUrl) {
@@ -1126,7 +1145,7 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       projectId: project[0].id,
       name: doc.name,
       whyMissing: doc.whyMissing,
-      impactOnProject: doc.impactOnProject,
+      impactOnProject: doc.impactOnProject || doc.whyMissing, // Utiliser whyMissing si impactOnProject n'est pas fourni
       status: 'pending' as const,
       whyStatus: '',
       createdAt: new Date(),
