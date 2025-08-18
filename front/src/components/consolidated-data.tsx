@@ -1,5 +1,7 @@
 import { useGetConsolidatedData } from "@/api/consolidated-data";
+import { useRetryStep } from "@/api/external-tools";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -11,8 +13,10 @@ import {
 
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  RefreshCw // ✅ Nouveau icône pour le bouton Relancer
 } from "lucide-react";
+import { queryClient } from "@/api/query-config";
 
 interface ConsolidatedDataProps {
   projectUniqueId: string;
@@ -48,6 +52,18 @@ const getBooleanIcon = (value: boolean | null) => {
 
 export const ConsolidatedDataComponent = ({ projectUniqueId }: ConsolidatedDataProps) => {
   const { data: consolidatedData, isLoading, isError } = useGetConsolidatedData(projectUniqueId);
+  
+  // ✅ Hook pour relancer l'étape 2 (Consolidation des données)
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 2, {
+    onSuccess: () => {
+      console.log('✅ Étape 2 relancée avec succès en mode debug');
+      // Invalider les caches pour rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ["consolidated-data", projectUniqueId] });
+    },
+    onError: (error) => {
+      console.error('❌ Erreur lors du relancement de l\'étape 2:', error);
+    }
+  });
 
   if (isLoading) {
     return (
@@ -109,9 +125,18 @@ export const ConsolidatedDataComponent = ({ projectUniqueId }: ConsolidatedDataP
             <TrendingUp className="h-4 w-4 text-blue-600" />
             Données consolidées
           </CardTitle>
-          <div className="text-xs text-gray-500">
-            {new Date(consolidatedData.updatedAt).toLocaleDateString('fr-FR')}
-          </div>
+          {/* ✅ Bouton Relancer - Version discrète */}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => retryStep()}
+            disabled={isRetrying}
+            className="flex items-center gap-1 h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+            title="Relancer la consolidation des données"
+          >
+            <RefreshCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+            <span className="hidden md:inline">{isRetrying ? 'Relance...' : 'Relancer'}</span>
+          </Button>
         </div>
       </CardHeader>
       

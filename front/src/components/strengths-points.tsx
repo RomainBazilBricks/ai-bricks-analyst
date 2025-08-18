@@ -79,8 +79,8 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg font-medium text-gray-900">
-            <Star className="h-5 w-5 text-green-600" />
-            Points forts
+            <TrendingUp className="h-5 w-5 text-purple-600" />
+            Analyse des forces et faiblesses
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -99,8 +99,8 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg font-medium text-gray-900">
-            <Star className="h-5 w-5 text-green-600" />
-            Points forts
+            <TrendingUp className="h-5 w-5 text-purple-600" />
+            Analyse des forces et faiblesses
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -120,8 +120,8 @@ export const StrengthsPoints = ({ projectUniqueId }: StrengthsPointsProps) => {
       <Card className="border-0 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-lg font-medium text-gray-900">
-            <Star className="h-5 w-5 text-green-600" />
-            Points forts
+            <TrendingUp className="h-5 w-5 text-purple-600" />
+            Analyse des forces et faiblesses
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">

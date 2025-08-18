@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { useGetMissingDocuments, useUpdateMissingDocumentStatus, type MissingDocument } from "@/api/missing-documents";
+import { useRetryStep } from "@/api/external-tools";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   XCircle,
   Check,
   X,
+  RefreshCw, // ✅ Nouveau icône pour le bouton Relancer
 
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
@@ -22,18 +24,6 @@ import { queryClient } from "@/api/query-config";
 interface MissingDocumentsProps {
   projectUniqueId: string;
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
 const DocumentRow = ({ doc, projectUniqueId }: { 
   doc: MissingDocument; 
@@ -168,6 +158,18 @@ export const MissingDocuments = ({ projectUniqueId }: MissingDocumentsProps) => 
   const { data: missingDocuments, isLoading, isError } = useGetMissingDocuments(projectUniqueId);
   const [showResolved, setShowResolved] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
+  
+  // ✅ Hook pour relancer l'étape 3 (Documents manquants)
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 3, {
+    onSuccess: () => {
+      console.log('✅ Étape 3 relancée avec succès en mode debug');
+      // Invalider les caches pour rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ["missing-documents", projectUniqueId] });
+    },
+    onError: (error) => {
+      console.error('❌ Erreur lors du relancement de l\'étape 3:', error);
+    }
+  });
 
   if (isLoading) {
     return (
@@ -255,20 +257,34 @@ export const MissingDocuments = ({ projectUniqueId }: MissingDocumentsProps) => 
             <FileX className="h-5 w-5 text-blue-600" />
             Documents manquants
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-orange-50 border-orange-200 text-orange-800">
-              {pendingDocs.length} en attente
-            </Badge>
-            {resolvedDocs.length > 0 && (
-              <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
-                {resolvedDocs.length} résolus
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-orange-50 border-orange-200 text-orange-800">
+                {pendingDocs.length} en attente
               </Badge>
-            )}
-            {irrelevantDocs.length > 0 && (
-              <Badge variant="outline" className="bg-gray-50 border-gray-200 text-gray-600">
-                {irrelevantDocs.length} non pertinents
-              </Badge>
-            )}
+              {resolvedDocs.length > 0 && (
+                <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
+                  {resolvedDocs.length} résolus
+                </Badge>
+              )}
+              {irrelevantDocs.length > 0 && (
+                <Badge variant="outline" className="bg-gray-50 border-gray-200 text-gray-600">
+                  {irrelevantDocs.length} non pertinents
+                </Badge>
+              )}
+            </div>
+            {/* ✅ Bouton Relancer - Version discrète */}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => retryStep()}
+              disabled={isRetrying}
+              className="flex items-center gap-1 h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+              title="Relancer l'analyse des documents manquants"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+              <span className="hidden md:inline">{isRetrying ? 'Relance...' : 'Relancer'}</span>
+            </Button>
           </div>
         </div>
       </CardHeader>

@@ -292,18 +292,18 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
               className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
             >
               <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3 flex-1">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
                   {getFileIcon(document.mimeType)}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h4 
-                        className="font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600"
+                        className="font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600 flex-1 min-w-0"
                         onClick={() => toggleDocumentDetails(document.id)}
                         title={document.fileName}
                       >
                         {document.fileName}
                       </h4>
-                      <Badge variant={getStatusColor(document.status)} className="flex items-center gap-1">
+                      <Badge variant={getStatusColor(document.status)} className="flex items-center gap-1 flex-shrink-0">
                         {getStatusIcon(document.status)}
                         {getStatusText(document.status)}
                       </Badge>
@@ -339,7 +339,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 ml-4 flex-shrink-0">
                   <Button
                     variant="outline"
                     size="sm"

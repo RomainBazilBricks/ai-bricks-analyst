@@ -7,6 +7,7 @@ export type SendMessageInput = {
   platform: string;
   projectUniqueId?: string; // Optionnel pour la rétrocompatibilité
   conversation_url?: string; // Optionnel pour continuer une conversation existante
+  debugMode?: boolean; // ✅ Nouveau: pour le mode debug sans déclenchement automatique
 };
 
 export type SendMessageResponse = {
@@ -71,17 +72,25 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
         console.log('🔄 Placeholders remplacés dans le message');
       }
       
+      // ✅ Ajouter le paramètre skipAutoTrigger si en mode debug
+      const requestBody = {
+        message: processedMessage, // Utiliser le message traité
+        platform: data.platform,
+        projectUniqueId: data.projectUniqueId, // Inclure l'ID du projet
+        ...(data.conversation_url && { conversation_url: data.conversation_url }), // Inclure l'URL de conversation si fournie
+        ...(data.debugMode && { skipAutoTrigger: 'true' }), // ✅ Mode debug
+      };
+
+      if (data.debugMode) {
+        console.log('🔧 Mode debug activé - étape suivante ne sera pas déclenchée automatiquement');
+      }
+
       const response = await fetch(`${toolUrl}/send-message`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          message: processedMessage, // Utiliser le message traité
-          platform: data.platform,
-          projectUniqueId: data.projectUniqueId, // Inclure l'ID du projet
-          ...(data.conversation_url && { conversation_url: data.conversation_url }), // Inclure l'URL de conversation si fournie
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -96,6 +105,47 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
     // Éviter les mutations simultanées
     retry: false,
     // Désactiver la mutation si l'URL est en cours de chargement
+    ...options,
+  });
+};
+
+/**
+ * ✅ Hook pour relancer une étape spécifique en mode debug (sans déclencher l'étape suivante)
+ * Utilise les étapes d'analyse pour récupérer le prompt correspondant
+ */
+export const useRetryStep = (projectUniqueId: string, stepOrder: number, options: Partial<UseMutationOptions<SendMessageResponse, Error, void>> = {}) => {
+  const { mutateAsync: sendMessage } = useSendMessageToTool();
+  
+  return useMutation<SendMessageResponse, Error, void>({
+    mutationFn: async () => {
+      // Récupérer les étapes d'analyse pour trouver celle correspondant à stepOrder
+      const baseApiUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+      const stepsResponse = await fetch(`${baseApiUrl}/api/workflow/steps`);
+      const steps = await stepsResponse.json();
+      
+      const targetStep = steps.find((step: any) => step.order === stepOrder);
+      if (!targetStep) {
+        throw new Error(`Étape avec l'ordre ${stepOrder} non trouvée`);
+      }
+
+      // Préparer le message avec les placeholders remplacés
+      let processedPrompt = targetStep.prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      
+      // Remplacer {documentListUrl} si nécessaire
+      if (processedPrompt.includes('{documentListUrl}')) {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+        const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
+        processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
+      }
+
+      // Envoyer le message en mode debug
+      return await sendMessage({
+        message: processedPrompt,
+        platform: 'manus',
+        projectUniqueId,
+        debugMode: true, // ✅ Mode debug activé
+      });
+    },
     ...options,
   });
 }; 

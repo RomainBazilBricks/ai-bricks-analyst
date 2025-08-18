@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useGetProjectConversations, useCreateDraft, type ConversationMessage } from "@/api/conversations";
+import { useRetryStep } from "@/api/external-tools";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -15,6 +16,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  RefreshCw
 
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
@@ -223,6 +225,18 @@ const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: str
 
 export const ProjectConversations = ({ projectUniqueId }: ProjectConversationsProps) => {
   const { data: conversations, isLoading, isError } = useGetProjectConversations(projectUniqueId);
+  
+  // ✅ Hook pour relancer l'étape 5 (Rédaction d'un message)
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 5, {
+    onSuccess: () => {
+      console.log('✅ Étape 5 relancée avec succès en mode debug');
+      // Invalider les caches pour rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ["conversations", projectUniqueId] });
+    },
+    onError: (error) => {
+      console.error('❌ Erreur lors du relancement de l\'étape 5:', error);
+    }
+  });
 
   if (isLoading) {
     return (
@@ -284,7 +298,21 @@ export const ProjectConversations = ({ projectUniqueId }: ProjectConversationsPr
         {/* Nouveau message */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-medium text-gray-900">Nouveau message</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-base font-medium text-gray-900">Nouveau message</h3>
+              {/* ✅ Bouton Relancer - Version discrète */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => retryStep()}
+                disabled={isRetrying}
+                className="flex items-center gap-1 h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+                title="Relancer la génération du message IA"
+              >
+                <RefreshCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">{isRetrying ? 'Relance...' : 'Relancer'}</span>
+              </Button>
+            </div>
             {conversations?.some(conv => conv.sender === 'IA') && (
               <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
                 <MessageSquare className="h-3 w-3" />

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useGetProjectById, useDeleteProject } from "@/api/projects";
-import { useSendMessageToTool } from "@/api/external-tools";
+import { useSendMessageToTool, useRetryStep } from "@/api/external-tools";
 import { WorkflowSteps } from "@/components/workflow-steps.tsx";
 import { ProjectDocuments } from "@/components/project-documents";
 import { ConsolidatedDataComponent } from "@/components/consolidated-data";
@@ -33,7 +33,8 @@ import {
   ExternalLink,
   ChevronDown,
   Trash2,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 import type { SendMessageInput, SendMessageResponse } from "@/api/external-tools";
@@ -105,6 +106,18 @@ export const ProjectDetailPage = () => {
     onSuccess: () => {
       navigate('/projects');
     },
+  });
+
+  // ✅ Hook pour relancer l'étape 4 (Forces et faiblesses)
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId!, 4, {
+    onSuccess: () => {
+      console.log('✅ Étape 4 relancée avec succès en mode debug');
+      // Invalider les caches pour rafraîchir les données
+      queryClient.invalidateQueries({ queryKey: ["strengths", projectUniqueId] });
+    },
+    onError: (error) => {
+      console.error('❌ Erreur lors du relancement de l\'étape 4:', error);
+    }
   });
 
   // Hook pour envoyer un message à l'outil externe
@@ -753,10 +766,24 @@ export const ProjectDetailPage = () => {
 
             {/* 4. Points forts et de vigilance en 2 colonnes */}
             <div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Analyse des forces et faiblesses
-              </h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Analyse des forces et faiblesses
+                </h3>
+                {/* ✅ Bouton Relancer - Version discrète */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => retryStep()}
+                  disabled={isRetrying}
+                  className="flex items-center gap-1 h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+                  title="Relancer l'analyse des forces et faiblesses"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                  <span className="hidden md:inline">{isRetrying ? 'Relance...' : 'Relancer'}</span>
+                </Button>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Colonne gauche : Points forts */}
                 <div>

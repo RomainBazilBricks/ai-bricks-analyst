@@ -1122,6 +1122,7 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
 export const receiveMissingDocuments = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId } = req.params;
+    const { skipAutoTrigger } = req.query; // ✅ Nouveau paramètre pour le mode debug
     const validatedData = MissingDocumentsPayloadSchema.parse({ 
       ...req.body, 
       projectUniqueId 
@@ -1207,10 +1208,18 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
         .where(eq(project_analysis_progress.id, workflowStep[0].id));
     }
 
-    // Déclencher automatiquement l'étape suivante (ordre 4 - Points de vigilance)
-    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 3);
-    if (!triggerResult.success) {
-      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+    // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
+    let nextStepTriggered = false;
+    if (skipAutoTrigger !== 'true') {
+      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 3);
+      nextStepTriggered = triggerResult.success;
+      if (!triggerResult.success) {
+        console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+      } else {
+        console.log(`✅ Étape suivante déclenchée automatiquement (mode normal)`);
+      }
+    } else {
+      console.log(`🔧 Mode debug activé - étape suivante non déclenchée automatiquement`);
     }
 
     res.status(200).json({
@@ -1223,7 +1232,8 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
         name: doc.name,
         status: doc.status
       })),
-      nextStepTriggered: triggerResult.success
+      nextStepTriggered,
+      debugMode: skipAutoTrigger === 'true'
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1285,6 +1295,7 @@ export const testPromptProcessing = async (req: Request, res: Response): Promise
 export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId } = req.params;
+    const { skipAutoTrigger } = req.query; // ✅ Nouveau paramètre pour le mode debug
     const validatedData = StrengthsWeaknessesPayloadSchema.parse({ 
       ...req.body, 
       projectUniqueId 
@@ -1373,10 +1384,18 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
         .where(eq(project_analysis_progress.id, workflowStep[0].id));
     }
 
-    // Déclencher automatiquement l'étape suivante (ordre 5 - Message final)
-    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 4);
-    if (!triggerResult.success) {
-      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+    // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
+    let nextStepTriggered = false;
+    if (skipAutoTrigger !== 'true') {
+      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 4);
+      nextStepTriggered = triggerResult.success;
+      if (!triggerResult.success) {
+        console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+      } else {
+        console.log(`✅ Étape suivante déclenchée automatiquement (mode normal)`);
+      }
+    } else {
+      console.log(`🔧 Mode debug activé - étape suivante non déclenchée automatiquement`);
     }
 
     res.status(200).json({
@@ -1390,7 +1409,8 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
         title: item.title,
         status: item.status
       })),
-      nextStepTriggered: triggerResult.success
+      nextStepTriggered,
+      debugMode: skipAutoTrigger === 'true'
     });
   } catch (error) {
     res.status(500).json({ 
