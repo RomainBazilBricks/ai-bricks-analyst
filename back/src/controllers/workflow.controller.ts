@@ -621,9 +621,37 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
       .where(eq(project_analysis_progress.id, workflowStep[0].id))
       .returning();
 
+    // ✅ NOUVEAU: Déclencher automatiquement l'étape suivante si l'étape est marquée comme 'completed'
+    let nextStepTriggered = false;
+    if (stepData.status === 'completed') {
+      try {
+        // Récupérer l'ordre de l'étape courante
+        const currentStep = await db
+          .select()
+          .from(analysis_steps)
+          .where(eq(analysis_steps.id, stepData.stepId))
+          .limit(1);
+
+        if (currentStep.length > 0) {
+          const triggerResult = await triggerNextWorkflowStep(stepData.projectUniqueId, currentStep[0].order);
+          nextStepTriggered = triggerResult.success;
+          
+          if (!triggerResult.success) {
+            console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
+          } else {
+            console.log(`✅ Étape suivante déclenchée automatiquement après completion de l'étape ${currentStep[0].order}`);
+          }
+        }
+      } catch (triggerError) {
+        console.error('❌ Erreur lors du déclenchement automatique de l\'étape suivante:', triggerError);
+        // Ne pas faire échouer la mise à jour principale
+      }
+    }
+
     res.json({
       message: 'Étape de workflow mise à jour avec succès',
-      step: updatedStep[0]
+      step: updatedStep[0],
+      nextStepTriggered
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1110,6 +1138,23 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       .values(documentsToCreate)
       .returning();
 
+    // Récupérer l'étape d'analyse avec order = 3 (documents manquants)
+    const analysisStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 3),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (analysisStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape d\'analyse non trouvée (order = 3)',
+        code: 'ANALYSIS_STEP_NOT_FOUND'
+      });
+    }
+
     // Mettre à jour l'étape du workflow
     const workflowStep = await db
       .select()
@@ -1117,7 +1162,7 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       .where(
         and(
           eq(project_analysis_progress.projectId, project[0].id),
-          eq(project_analysis_progress.stepId, 3) // Étape 3 = documents manquants
+          eq(project_analysis_progress.stepId, analysisStep[0].id) // Utiliser le vrai stepId
         )
       )
       .limit(1);
@@ -1250,6 +1295,23 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
       .values(itemsToCreate)
       .returning();
 
+    // Récupérer l'étape d'analyse avec order = 4 (points de vigilance)
+    const analysisStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 4),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (analysisStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape d\'analyse non trouvée (order = 4)',
+        code: 'ANALYSIS_STEP_NOT_FOUND'
+      });
+    }
+
     // Mettre à jour l'étape du workflow
     const workflowStep = await db
       .select()
@@ -1257,7 +1319,7 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
       .where(
         and(
           eq(project_analysis_progress.projectId, project[0].id),
-          eq(project_analysis_progress.stepId, 4) // Étape 4 = forces et faiblesses
+          eq(project_analysis_progress.stepId, analysisStep[0].id) // Utiliser le vrai stepId
         )
       )
       .limit(1);
@@ -1352,6 +1414,23 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
         attachments: [],
       });
 
+    // Récupérer l'étape d'analyse avec order = 5 (message final)
+    const analysisStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 5),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (analysisStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape d\'analyse non trouvée (order = 5)',
+        code: 'ANALYSIS_STEP_NOT_FOUND'
+      });
+    }
+
     // Mettre à jour l'étape du workflow (étape 5)
     const workflowStep = await db
       .select()
@@ -1359,7 +1438,7 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
       .where(
         and(
           eq(project_analysis_progress.projectId, project[0].id),
-          eq(project_analysis_progress.stepId, 5) // Étape 5 = message final
+          eq(project_analysis_progress.stepId, analysisStep[0].id) // Utiliser le vrai stepId
         )
       )
       .limit(1);
