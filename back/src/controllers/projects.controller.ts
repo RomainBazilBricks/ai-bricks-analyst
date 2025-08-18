@@ -480,12 +480,10 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
       console.warn('Error fetching documents for list page:', dbError);
     }
 
-    // Générer la liste avec les endpoints proxy (plus fiables pour Manus)
-    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+    // Générer la liste avec les URLs S3 directes (affichage des URLs complètes)
     const documentsList = projectDocuments.length > 0 
       ? projectDocuments.map(doc => {
-          const proxyUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents/${doc.id}/download`;
-          return `<li><a href="${proxyUrl}" target="_blank">${doc.fileName} (${doc.mimeType})</a></li>`;
+          return `<li><a href="${doc.url}" target="_blank">${doc.url}</a></li>`;
         }).join('')
       : '<li>Aucun document disponible pour ce projet.</li>';
 
@@ -507,15 +505,22 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
             padding: 0; 
           }
           li { 
-            margin-bottom: 10px; 
+            margin-bottom: 15px; 
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            border-left: 4px solid #0066cc;
           }
           a { 
             color: #0066cc; 
             text-decoration: none;
             word-break: break-all;
+            font-family: monospace;
+            font-size: 14px;
           }
           a:hover { 
-            text-decoration: underline; 
+            text-decoration: underline;
+            color: #004499;
           }
         </style>
       </head>
