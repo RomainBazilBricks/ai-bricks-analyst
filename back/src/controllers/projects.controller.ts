@@ -15,7 +15,7 @@ import {
   project_analysis_progress,
   consolidated_data
 } from '@/db/schema';
-import { initiateWorkflowForProject } from '@/controllers/workflow.controller';
+import { initiateWorkflowForProject, uploadZipFromUrl } from '@/controllers/workflow.controller';
 import { uploadFileFromUrl, s3Client } from '@/lib/s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
@@ -212,6 +212,31 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
         const workflowResult = await initiateWorkflowForProject(projectData.projectUniqueId);
         if (workflowResult.success) {
           console.log(`✅ Workflow initié automatiquement pour le nouveau projet ${projectData.projectUniqueId} avec ${workflowResult.stepsCreated} étapes`);
+          
+          // Si des documents ont été ajoutés avec succès, déclencher automatiquement l'étape 0 (Upload ZIP)
+          if (projectData.fileUrls && projectData.fileUrls.length > 0) {
+            console.log(`🚀 Déclenchement automatique de l'étape 0 (Upload ZIP) pour le projet ${projectData.projectUniqueId}`);
+            // Déclencher l'étape 0 de manière asynchrone sans bloquer la réponse
+            setTimeout(async () => {
+              try {
+                // Créer un objet Request/Response mockés pour appeler la fonction
+                const mockReq = {
+                  body: { projectUniqueId: projectData.projectUniqueId }
+                } as Request;
+                const mockRes = {
+                  status: (code: number) => ({
+                    json: (data: any) => {
+                      console.log(`✅ Étape 0 déclenchée avec succès pour le projet ${projectData.projectUniqueId}:`, data);
+                    }
+                  })
+                } as Response;
+                
+                await uploadZipFromUrl(mockReq, mockRes);
+              } catch (error) {
+                console.error(`❌ Erreur lors du déclenchement de l'étape 0 pour le projet ${projectData.projectUniqueId}:`, error);
+              }
+            }, 2000); // Délai de 2 secondes pour laisser le temps à la création de se finaliser
+          }
         } else {
           console.warn(`⚠️ Impossible d'initier le workflow pour le projet ${projectData.projectUniqueId}: ${workflowResult.error}`);
         }

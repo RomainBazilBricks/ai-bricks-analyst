@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useGetWorkflowStatus, useInitiateWorkflow, useGetAnalysisSteps } from "@/api/workflow";
+import { useGetWorkflowStatus, useInitiateWorkflow, useGetAnalysisSteps, useTriggerStep0 } from "@/api/workflow";
 import { useSendMessageToTool, type SendMessageInput } from "@/api/external-tools";
 import { useSaveAIConversation } from "@/api/ai-conversations";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,8 +18,8 @@ import {
   MessageCircle,
   Code,
   Loader2,
-
-  FileText
+  FileText,
+  Package
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 
@@ -69,6 +69,13 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
   // Hook pour envoyer des prompts à l'IA (nouvelle version avec conversation_url)
   const { mutateAsync: sendMessageToTool } = useSendMessageToTool();
 
+  // Hook pour déclencher l'étape 0 (Upload ZIP)
+  const { mutateAsync: triggerStep0 } = useTriggerStep0({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workflow", "status", projectUniqueId] });
+    },
+  });
+
   // Hook pour sauvegarder les conversations AI
   const { mutateAsync: saveAIConversation } = useSaveAIConversation({
     onSuccess: () => {
@@ -87,7 +94,55 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
     }
   };
 
-  // Fonction pour envoyer un prompt à l'IA
+  // Fonction pour déclencher l'étape 0 (Upload ZIP)
+  const handleTriggerStep0 = async (step: any) => {
+    if (!projectUniqueId) return;
+    
+    const stepId = step.step?.id || step.id;
+    
+    // Double vérification : si déjà en cours d'envoi, ne pas continuer
+    if (sendingPrompts.has(stepId)) {
+      console.log('⚠️ Tentative d\'envoi multiple détectée, requête ignorée');
+      return;
+    }
+    
+    // Marquer comme en cours d'envoi
+    setSendingPrompts(prev => new Set(prev).add(stepId));
+    
+    try {
+      console.log('🚀 Déclenchement de l\'étape 0 (Upload ZIP) pour le projet:', projectUniqueId);
+      
+      const response = await triggerStep0({ projectUniqueId });
+      
+      // Stocker le résultat
+      setPromptResults(prev => {
+        const newMap = new Map(prev);
+        newMap.set(stepId, { 
+          result: `ZIP créé avec succès: ${response.zipFileName} (${response.documentCount} documents, ${Math.round(response.zipSize / 1024)} KB)` 
+        });
+        return newMap;
+      });
+      
+      console.log('✅ Étape 0 déclenchée avec succès:', response);
+      
+    } catch (error) {
+      console.error('❌ Erreur lors du déclenchement de l\'étape 0:', error);
+      setPromptResults(prev => {
+        const newMap = new Map(prev);
+        newMap.set(stepId, { result: '', error: 'Erreur lors de la génération du ZIP' });
+        return newMap;
+      });
+    } finally {
+      // Retirer de la liste des envois en cours
+      setSendingPrompts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(stepId);
+        return newSet;
+      });
+    }
+  };
+
+  // Fonction pour envoyer un prompt à l'IA (pour les autres étapes)
   const handleSendPromptToAI = async (step: any) => {
     if (!projectUniqueId || !step) return;
     
@@ -234,6 +289,8 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
 
   const getStepIcon = (stepOrder: number) => {
     switch (stepOrder) {
+      case 0:
+        return <Package className="h-5 w-5" />;
       case 1:
         return <Eye className="h-5 w-5" />;
       case 2:
@@ -429,13 +486,20 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                               <Code className="h-3 w-3" />
                             </Button>
                             
-                            {/* Bouton pour envoyer à l'IA */}
+                            {/* Bouton pour envoyer à l'IA ou déclencher l'étape 0 */}
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
-                              title="Envoyer à l'IA"
-                              onClick={() => handleSendPromptToAI(step)}
+                              title={((step as any).step?.order || (step as any).order) === 0 ? "Déclencher l'upload ZIP" : "Envoyer à l'IA"}
+                              onClick={() => {
+                                const stepOrder = (step as any).step?.order || (step as any).order;
+                                if (stepOrder === 0) {
+                                  handleTriggerStep0(step);
+                                } else {
+                                  handleSendPromptToAI(step);
+                                }
+                              }}
                               disabled={sendingPrompts.has(Number(step.step?.id || step.id))}
                             >
                               {sendingPrompts.has(Number(step.step?.id || step.id)) ? (
@@ -548,7 +612,12 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
               </Button>
               <Button 
                 onClick={() => {
-                  handleSendPromptToAI(selectedPrompt.step);
+                  const stepOrder = selectedPrompt.step.step?.order || selectedPrompt.step.order;
+                  if (stepOrder === 0) {
+                    handleTriggerStep0(selectedPrompt.step);
+                  } else {
+                    handleSendPromptToAI(selectedPrompt.step);
+                  }
                   setSelectedPrompt(null);
                 }}
                 disabled={sendingPrompts.has(Number(selectedPrompt.step.step?.id || selectedPrompt.step.id))}
@@ -559,7 +628,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
-                Envoyer à l'IA
+                {((selectedPrompt.step.step?.order || selectedPrompt.step.order) === 0) ? "Déclencher l'upload ZIP" : "Envoyer à l'IA"}
               </Button>
             </div>
           </div>

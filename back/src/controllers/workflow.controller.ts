@@ -25,6 +25,7 @@ import {
   WorkflowStatus,
   api_configurations
 } from '@/db/schema';
+import { createZipFromDocuments } from '@/lib/s3';
 import { eq, and, asc, desc } from 'drizzle-orm';
 import type { 
   CreateAnalysisStepInput,
@@ -249,6 +250,13 @@ export const initializeDefaultAnalysisSteps = async (): Promise<void> => {
           // Les prompts sont gérés par l'interface AI et mis à jour via des scripts dédiés
     // Ne pas définir de prompts ici pour éviter les confusions
     const defaultSteps = [
+      {
+        name: 'Upload des documents',
+        description: 'Génère un fichier ZIP contenant tous les documents du projet et l\'envoie à Manus pour analyse',
+        prompt: 'PROMPT_MANAGED_BY_AI_INTERFACE', // Géré par l'interface AI
+        order: 0,
+        isActive: 1
+      },
       {
         name: 'Analyse globale',
         description: 'Une analyse détaillée et approfondie du projet avec vue d\'ensemble',
@@ -1560,4 +1568,335 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
       code: 'RECEIVE_FINAL_MESSAGE_ERROR'
     });
   }
-}; 
+};
+
+/**
+ * Génère un ZIP avec tous les documents d'un projet et l'envoie à Manus
+ * @route POST /api/workflow/upload-zip-from-url
+ */
+export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.body;
+
+    if (!projectUniqueId) {
+      return res.status(400).json({
+        error: 'ProjectUniqueId est requis',
+        code: 'MISSING_PROJECT_UNIQUE_ID'
+      });
+    }
+
+    console.log(`🚀 Début de l'upload ZIP pour le projet: ${projectUniqueId}`);
+
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer tous les documents du projet via les sessions
+    const projectDocuments = await db
+      .select({
+        fileName: documents.fileName,
+        url: documents.url,
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(and(
+        eq(sessions.projectId, project[0].id),
+        eq(documents.status, 'PROCESSED')
+      ));
+
+    if (projectDocuments.length === 0) {
+      return res.status(400).json({
+        error: 'Aucun document trouvé pour ce projet',
+        code: 'NO_DOCUMENTS_FOUND'
+      });
+    }
+
+    console.log(`📄 ${projectDocuments.length} documents trouvés pour le projet ${projectUniqueId}`);
+
+    // Créer le ZIP et l'uploader vers S3
+    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId);
+
+    // Récupérer le prompt de l'étape 0 (Upload des documents)
+    const step0 = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 0),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (step0.length === 0) {
+      return res.status(500).json({
+        error: 'Étape 0 non trouvée dans le workflow. Exécutez le script add-step-0-upload-zip.ts',
+        code: 'STEP_0_NOT_FOUND'
+      });
+    }
+
+    // Récupérer le prompt dynamique depuis la base de données
+    let dynamicMessage = step0[0].prompt;
+    
+    // Remplacer les variables dynamiques dans le message
+    dynamicMessage = dynamicMessage.replace(/{projectUniqueId}/g, projectUniqueId);
+    dynamicMessage = dynamicMessage.replace(/{documentCount}/g, projectDocuments.length.toString());
+
+    // Utiliser l'infrastructure existante pour envoyer à l'API Python
+    // Même format que external-tools.ts mais avec zip_url
+    const payload = {
+      zip_url: zipResult.s3Url,
+      message: dynamicMessage,
+      platform: 'manus',
+      projectUniqueId
+    };
+
+    // Récupérer la configuration API Python
+    let pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL;
+    
+    if (!pythonApiUrl) {
+      const [config] = await db
+        .select()
+        .from(api_configurations)
+        .where(and(
+          eq(api_configurations.name, 'Python API'),
+          eq(api_configurations.isActive, true)
+        ));
+      
+      pythonApiUrl = config?.url || 'http://localhost:8000';
+    }
+
+    console.log(`📡 Envoi du ZIP à l'API Python: ${pythonApiUrl}`);
+
+    const response = await axios.post(`${pythonApiUrl}/send-message`, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: 60000, // 60 secondes pour l'upload du ZIP
+    });
+
+    if (response.data && response.data.conversation_url) {
+      // Mettre à jour l'étape 0 comme terminée avec l'URL de conversation
+      await db
+        .update(project_analysis_progress)
+        .set({
+          status: 'completed',
+          content: `ZIP uploadé: ${zipResult.fileName} (${zipResult.size} bytes)`,
+          manusConversationUrl: response.data.conversation_url,
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(project_analysis_progress.projectId, project[0].id),
+          eq(project_analysis_progress.stepId, step0[0].id)
+        ));
+
+      // Déclencher automatiquement l'étape suivante
+      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 0);
+
+      console.log(`✅ ZIP envoyé avec succès à Manus pour le projet: ${projectUniqueId}`);
+      console.log(`🔗 URL conversation: ${response.data.conversation_url}`);
+
+      res.status(200).json({
+        message: 'ZIP créé et envoyé avec succès à Manus',
+        projectUniqueId,
+        zipUrl: zipResult.s3Url,
+        zipFileName: zipResult.fileName,
+        zipSize: zipResult.size,
+        documentCount: projectDocuments.length,
+        conversationUrl: response.data.conversation_url,
+        nextStepTriggered: triggerResult.success
+      });
+    } else {
+      throw new Error('Réponse inattendue de l\'API Python');
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'upload ZIP:', error);
+    res.status(500).json({
+      error: (error as Error).message,
+      code: 'UPLOAD_ZIP_ERROR'
+    });
+  }
+};
+
+/**
+ * Déclenche manuellement l'étape 1 (Analyse globale) du workflow
+ * @route POST /api/workflow/trigger-step-1/:projectUniqueId
+ */
+export const triggerStep1Analysis = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    if (!projectUniqueId) {
+      return res.status(400).json({
+        error: 'ProjectUniqueId est requis',
+        code: 'MISSING_PROJECT_UNIQUE_ID'
+      });
+    }
+
+    console.log(`🚀 Déclenchement manuel de l'étape 1 pour le projet: ${projectUniqueId}`);
+
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer l'étape 1
+    const step1 = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 1),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (step1.length === 0) {
+      return res.status(500).json({
+        error: 'Étape 1 non trouvée dans le workflow',
+        code: 'STEP_1_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que l'étape 1 existe dans le workflow du projet
+    const workflowStep1 = await db
+      .select()
+      .from(project_analysis_progress)
+      .where(and(
+        eq(project_analysis_progress.projectId, project[0].id),
+        eq(project_analysis_progress.stepId, step1[0].id)
+      ))
+      .limit(1);
+
+    if (workflowStep1.length === 0) {
+      return res.status(404).json({
+        error: 'Étape 1 non trouvée dans le workflow du projet',
+        code: 'WORKFLOW_STEP_1_NOT_FOUND'
+      });
+    }
+
+    // Récupérer l'étape 0 et marquer comme terminée si elle ne l'est pas déjà
+    const step0 = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 0),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    let conversationUrl: string | undefined;
+    
+    if (step0.length > 0) {
+      const workflowStep0 = await db
+        .select()
+        .from(project_analysis_progress)
+        .where(and(
+          eq(project_analysis_progress.projectId, project[0].id),
+          eq(project_analysis_progress.stepId, step0[0].id)
+        ))
+        .limit(1);
+
+      if (workflowStep0.length > 0) {
+        // Récupérer l'URL de conversation de l'étape 0
+        if (workflowStep0[0].manusConversationUrl) {
+          conversationUrl = workflowStep0[0].manusConversationUrl;
+        }
+
+        // Marquer l'étape 0 comme terminée si elle ne l'est pas déjà
+        if (workflowStep0[0].status !== 'completed') {
+          await db
+            .update(project_analysis_progress)
+            .set({
+              status: 'completed',
+              content: 'Analyse des documents ZIP terminée - déclenchement de l\'étape suivante',
+              completedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(project_analysis_progress.id, workflowStep0[0].id));
+
+          console.log(`✅ Étape 0 marquée comme terminée automatiquement pour le projet: ${projectUniqueId}`);
+        }
+      }
+    }
+
+    // Mettre l'étape 1 en statut 'in_progress'
+    await db
+      .update(project_analysis_progress)
+      .set({
+        status: 'in_progress',
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_progress.id, workflowStep1[0].id));
+
+    // Envoyer le prompt de l'étape 1 à l'IA
+    const result = await sendPromptToAI(
+      step1[0].prompt,
+      projectUniqueId,
+      step1[0].id,
+      step1[0].name,
+      conversationUrl
+    );
+
+    if (result.success && result.conversationUrl) {
+      // Mettre à jour l'étape 1 avec l'URL de conversation
+      await db
+        .update(project_analysis_progress)
+        .set({
+          manusConversationUrl: result.conversationUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_progress.id, workflowStep1[0].id));
+
+      console.log(`✅ Étape 1 déclenchée avec succès pour le projet: ${projectUniqueId}`);
+      console.log(`🔗 URL conversation: ${result.conversationUrl}`);
+
+      res.status(200).json({
+        message: 'Étape 1 (Analyse globale) déclenchée avec succès',
+        projectUniqueId,
+        stepId: step1[0].id,
+        stepName: step1[0].name,
+        conversationUrl: result.conversationUrl,
+        status: 'in_progress'
+      });
+    } else {
+      // Remettre l'étape en pending en cas d'erreur
+      await db
+        .update(project_analysis_progress)
+        .set({
+          status: 'pending',
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_progress.id, workflowStep1[0].id));
+
+      throw new Error(result.error || 'Erreur lors de l\'envoi du prompt à l\'IA');
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur lors du déclenchement de l\'étape 1:', error);
+    res.status(500).json({
+      error: (error as Error).message,
+      code: 'TRIGGER_STEP_1_ERROR'
+    });
+  }
+};
+
+ 

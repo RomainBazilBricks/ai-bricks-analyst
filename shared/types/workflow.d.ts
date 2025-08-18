@@ -138,4 +138,20 @@ export type WorkflowProgressResponse = {
     hasResults: boolean;
     content: string | null;
   }>;
+};
+
+// Étape 0 : Upload ZIP des documents
+export type UploadZipFromUrlPayload = {
+  projectUniqueId: string;
+};
+
+export type UploadZipFromUrlResponse = {
+  message: string;
+  projectUniqueId: string;
+  zipUrl: string;
+  zipFileName: string;
+  zipSize: number;
+  documentCount: number;
+  conversationUrl: string;
+  nextStepTriggered: boolean;
 }; 

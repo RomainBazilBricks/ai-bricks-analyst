@@ -2,6 +2,8 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import archiver from 'archiver';
+import { Readable } from 'stream';
 
 dotenv.config();
 
@@ -178,5 +180,132 @@ export function extractS3KeyFromUrl(s3Url: string): string {
     return url.pathname.substring(1); // Enlever le "/" initial
   } catch {
     throw new Error('Invalid S3 URL format');
+  }
+}
+
+/**
+ * Télécharge un fichier depuis S3
+ */
+async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
+  try {
+    const s3Key = extractS3KeyFromUrl(s3Url);
+    const command = new GetObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: s3Key,
+    });
+
+    const response = await s3Client.send(command);
+    if (!response.Body) {
+      throw new Error('No body in S3 response');
+    }
+
+    // Convertir le stream en buffer
+    const chunks: Uint8Array[] = [];
+    const reader = response.Body as Readable;
+    
+    return new Promise((resolve, reject) => {
+      reader.on('data', (chunk) => chunks.push(chunk));
+      reader.on('error', reject);
+      reader.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+  } catch (error) {
+    console.error(`Error downloading file from S3: ${s3Url}`, error);
+    throw error;
+  }
+}
+
+/**
+ * Crée un fichier ZIP à partir d'une liste de documents et l'upload vers S3
+ */
+export async function createZipFromDocuments(
+  documents: Array<{ fileName: string; url: string }>,
+  projectUniqueId: string
+): Promise<{ s3Url: string; fileName: string; hash: string; size: number }> {
+  try {
+    console.log(`📦 Création d'un ZIP pour le projet ${projectUniqueId} avec ${documents.length} documents`);
+
+    // Créer l'archive ZIP en mémoire
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Compression maximale
+    });
+
+    const chunks: Buffer[] = [];
+    
+    // Collecter les chunks du ZIP
+    archive.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+
+    // Promesse pour attendre la fin de l'archivage
+    const zipPromise = new Promise<Buffer>((resolve, reject) => {
+      archive.on('end', () => {
+        const zipBuffer = Buffer.concat(chunks);
+        console.log(`✅ ZIP créé avec succès: ${zipBuffer.length} bytes`);
+        resolve(zipBuffer);
+      });
+
+      archive.on('error', (error) => {
+        console.error('❌ Erreur lors de la création du ZIP:', error);
+        reject(error);
+      });
+    });
+
+    // Ajouter chaque document au ZIP
+    for (const doc of documents) {
+      try {
+        console.log(`📄 Ajout du document: ${doc.fileName}`);
+        const fileBuffer = await downloadFileFromS3(doc.url);
+        
+        // Nettoyer le nom de fichier pour éviter les problèmes de chemin
+        const cleanFileName = doc.fileName.replace(/[<>:"/\\|?*]/g, '_');
+        archive.append(fileBuffer, { name: cleanFileName });
+      } catch (error) {
+        console.warn(`⚠️ Impossible d'ajouter le document ${doc.fileName}:`, error);
+        // Continuer avec les autres documents même si un échoue
+      }
+    }
+
+    // Finaliser l'archive
+    archive.finalize();
+
+    // Attendre que le ZIP soit créé
+    const zipBuffer = await zipPromise;
+
+    // Calculer le hash du ZIP
+    const hash = crypto.createHash('sha256').update(zipBuffer).digest('hex');
+
+    // Générer le nom du fichier ZIP
+    const zipFileName = `${projectUniqueId}-documents-${Date.now()}.zip`;
+    const s3Key = `projects/${projectUniqueId}/zips/${hash}-${zipFileName}`;
+
+    // Upload du ZIP vers S3
+    const putCommand = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: s3Key,
+      Body: zipBuffer,
+      ContentType: 'application/zip',
+      Metadata: {
+        projectUniqueId,
+        documentCount: documents.length.toString(),
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    await s3Client.send(putCommand);
+
+    // Générer l'URL S3
+    const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_S3_REGION || 'eu-north-1'}.amazonaws.com/${s3Key}`;
+
+    console.log(`✅ ZIP uploadé vers S3: ${s3Url}`);
+
+    return {
+      s3Url,
+      fileName: zipFileName,
+      hash,
+      size: zipBuffer.length,
+    };
+  } catch (error) {
+    console.error('❌ Erreur lors de la création du ZIP:', error);
+    throw new Error(`Failed to create ZIP: ${(error as Error).message}`);
   }
 } 

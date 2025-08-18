@@ -16,7 +16,9 @@ import {
   receiveMissingDocuments,
   testPromptProcessing,
   receiveStrengthsAndWeaknesses,
-  receiveFinalMessage
+  receiveFinalMessage,
+  uploadZipFromUrl,
+  triggerStep1Analysis
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
 
@@ -191,5 +193,23 @@ router.post('/final-message/:projectUniqueId', receiveFinalMessage);
  * @access Public (pour test)
  */
 router.get('/test-prompt/:projectUniqueId', testPromptProcessing);
+
+/**
+ * Endpoint pour l'étape 0: Upload des documents en ZIP vers Manus
+ * @route POST /api/workflow/upload-zip-from-url
+ * @param {object} body - Données contenant le projectUniqueId
+ * @returns {Object} Détails du ZIP créé et URL de conversation Manus
+ * @access Public (pour déclencher l'étape 0)
+ */
+router.post('/upload-zip-from-url', uploadZipFromUrl);
+
+/**
+ * Endpoint pour déclencher manuellement l'étape 1: Analyse globale
+ * @route POST /api/workflow/trigger-step-1/:projectUniqueId
+ * @param {string} projectUniqueId - ID unique du projet
+ * @returns {Object} Confirmation du déclenchement et URL de conversation
+ * @access Public (pour Manus)
+ */
+router.post('/trigger-step-1/:projectUniqueId', triggerStep1Analysis);
 
 export default router; 

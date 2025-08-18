@@ -122,4 +122,19 @@ export const useUpdateAnalysisStepDefinition = (stepId: number, options = {}) =>
     ...options,
     mutationFn: func,
   });
-}; 
+};
+
+/**
+ * Hook pour déclencher l'étape 0: Upload des documents ZIP
+ */
+export const useTriggerStep0 = (options = {}) =>
+  useMutator<{ projectUniqueId: string }, { 
+    message: string; 
+    projectUniqueId: string; 
+    zipUrl: string; 
+    zipFileName: string; 
+    zipSize: number; 
+    documentCount: number; 
+    conversationUrl: string; 
+    nextStepTriggered: boolean; 
+  }>("/workflow/upload-zip-from-url", options); 
