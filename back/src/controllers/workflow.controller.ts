@@ -1586,8 +1586,10 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     }
 
     console.log(`🚀 Début de l'upload ZIP pour le projet: ${projectUniqueId}`);
+    console.log(`📋 Payload reçu:`, JSON.stringify(req.body, null, 2));
 
     // Récupérer le projet
+    console.log(`🔍 Recherche du projet: ${projectUniqueId}`);
     const project = await db
       .select()
       .from(projects)
@@ -1595,13 +1597,17 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       .limit(1);
 
     if (project.length === 0) {
+      console.log(`❌ Projet non trouvé: ${projectUniqueId}`);
       return res.status(404).json({
         error: 'Projet non trouvé',
         code: 'PROJECT_NOT_FOUND'
       });
     }
 
+    console.log(`✅ Projet trouvé: ${project[0].name} (ID: ${project[0].id})`);
+
     // Récupérer tous les documents du projet via les sessions
+    console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
     const projectDocuments = await db
       .select({
         fileName: documents.fileName,
@@ -1615,6 +1621,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       ));
 
     if (projectDocuments.length === 0) {
+      console.log(`❌ Aucun document trouvé pour le projet ${projectUniqueId}`);
       return res.status(400).json({
         error: 'Aucun document trouvé pour ce projet',
         code: 'NO_DOCUMENTS_FOUND'
@@ -1622,11 +1629,22 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     }
 
     console.log(`📄 ${projectDocuments.length} documents trouvés pour le projet ${projectUniqueId}`);
+    projectDocuments.forEach((doc, index) => {
+      console.log(`   ${index + 1}. ${doc.fileName} - ${doc.url}`);
+    });
 
     // Créer le ZIP et l'uploader vers S3
+    console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
     const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId);
+    console.log(`✅ ZIP créé avec succès:`, {
+      fileName: zipResult.fileName,
+      s3Url: zipResult.s3Url,
+      size: zipResult.size,
+      hash: zipResult.hash
+    });
 
     // Récupérer le prompt de l'étape 0 (Upload des documents)
+    console.log(`🔍 Recherche de l'étape 0 dans analysis_steps...`);
     const step0 = await db
       .select()
       .from(analysis_steps)
@@ -1637,18 +1655,28 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       .limit(1);
 
     if (step0.length === 0) {
+      console.log(`❌ Étape 0 non trouvée dans analysis_steps`);
       return res.status(500).json({
         error: 'Étape 0 non trouvée dans le workflow. Exécutez le script add-step-0-upload-zip.ts',
         code: 'STEP_0_NOT_FOUND'
       });
     }
 
+    console.log(`✅ Étape 0 trouvée: "${step0[0].name}" (ID: ${step0[0].id})`);
+    console.log(`📝 Prompt original (premiers 200 chars): ${step0[0].prompt.substring(0, 200)}...`);
+
     // Récupérer le prompt dynamique depuis la base de données
     let dynamicMessage = step0[0].prompt;
     
     // Remplacer les variables dynamiques dans le message
+    console.log(`🔄 Remplacement des variables dynamiques:`);
+    console.log(`   - {projectUniqueId} → ${projectUniqueId}`);
+    console.log(`   - {documentCount} → ${projectDocuments.length}`);
+    
     dynamicMessage = dynamicMessage.replace(/{projectUniqueId}/g, projectUniqueId);
     dynamicMessage = dynamicMessage.replace(/{documentCount}/g, projectDocuments.length.toString());
+    
+    console.log(`📝 Message final (premiers 200 chars): ${dynamicMessage.substring(0, 200)}...`);
 
     // Utiliser l'infrastructure existante pour envoyer à l'API Python
     // Même format que external-tools.ts mais avec zip_url
@@ -1659,10 +1687,18 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       projectUniqueId
     };
 
+    console.log(`📦 Payload préparé pour l'API Python:`);
+    console.log(`   - zip_url: ${payload.zip_url}`);
+    console.log(`   - platform: ${payload.platform}`);
+    console.log(`   - projectUniqueId: ${payload.projectUniqueId}`);
+    console.log(`   - message (premiers 200 chars): ${payload.message.substring(0, 200)}...`);
+    console.log(`   - taille complète du message: ${payload.message.length} caractères`);
+
     // Récupérer la configuration API Python
     let pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL;
     
     if (!pythonApiUrl) {
+      console.log(`🔍 Recherche de la configuration API Python dans la base de données...`);
       const [config] = await db
         .select()
         .from(api_configurations)
@@ -1672,9 +1708,14 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
         ));
       
       pythonApiUrl = config?.url || 'http://localhost:8000';
+      console.log(`🔧 URL récupérée depuis la DB: ${pythonApiUrl}`);
+    } else {
+      console.log(`🔧 URL récupérée depuis les variables d'environnement: ${pythonApiUrl}`);
     }
 
-    console.log(`📡 Envoi du ZIP à l'API Python: ${pythonApiUrl}`);
+    console.log(`📡 Envoi du ZIP à l'API Python: ${pythonApiUrl}/send-message`);
+    console.log(`📄 Payload JSON complet:`);
+    console.log(JSON.stringify(payload, null, 2));
 
     const response = await axios.post(`${pythonApiUrl}/send-message`, payload, {
       headers: {
@@ -1682,6 +1723,9 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       },
       timeout: 60000, // 60 secondes pour l'upload du ZIP
     });
+
+    console.log(`📨 Réponse reçue de l'API Python:`, response.status, response.statusText);
+    console.log(`📄 Corps de la réponse:`, JSON.stringify(response.data, null, 2));
 
     if (response.data && response.data.conversation_url) {
       // Mettre à jour l'étape 0 comme terminée avec l'URL de conversation
@@ -1716,13 +1760,31 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
         nextStepTriggered: triggerResult.success
       });
     } else {
+      console.error(`❌ Réponse inattendue de l'API Python:`, response.data);
+      console.error(`📊 Status de la réponse:`, response.status);
+      console.error(`📋 Headers de la réponse:`, response.headers);
       throw new Error('Réponse inattendue de l\'API Python');
     }
 
-  } catch (error) {
-    console.error('❌ Erreur lors de l\'upload ZIP:', error);
+  } catch (error: any) {
+    console.error(`❌ Erreur lors de l'upload ZIP pour le projet ${projectUniqueId}:`);
+    console.error(`📄 Type d'erreur:`, error.constructor.name);
+    console.error(`📄 Message d'erreur:`, error.message);
+    
+    if (error.response) {
+      console.error(`📊 Status de l'erreur HTTP:`, error.response.status);
+      console.error(`📋 Headers de l'erreur:`, error.response.headers);
+      console.error(`📄 Corps de l'erreur:`, error.response.data);
+    }
+    
+    if (error.request) {
+      console.error(`📡 Requête qui a échoué:`, error.request);
+    }
+    
+    console.error(`🔍 Stack trace:`, error.stack);
+    
     res.status(500).json({
-      error: (error as Error).message,
+      error: error.message || 'Erreur lors de l\'upload ZIP',
       code: 'UPLOAD_ZIP_ERROR'
     });
   }
