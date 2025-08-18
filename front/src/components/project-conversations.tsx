@@ -23,6 +23,7 @@ import { queryClient } from "@/api/query-config";
 
 interface ProjectConversationsProps {
   projectUniqueId: string;
+  latestConversationUrl?: string; // ✅ Ajouter le conversationUrl
 }
 
 const formatDate = (date: Date | string) => {
@@ -223,20 +224,25 @@ const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: str
   );
 };
 
-export const ProjectConversations = ({ projectUniqueId }: ProjectConversationsProps) => {
+export const ProjectConversations = ({ projectUniqueId, latestConversationUrl }: ProjectConversationsProps) => {
   const { data: conversations, isLoading, isError } = useGetProjectConversations(projectUniqueId);
   
   // ✅ Hook pour relancer l'étape 5 (Rédaction d'un message)
-  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 5, {
-    onSuccess: () => {
-      console.log('✅ Étape 5 relancée avec succès en mode debug');
-      // Invalider les caches pour rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ["conversations", projectUniqueId] });
-    },
-    onError: (error) => {
-      console.error('❌ Erreur lors du relancement de l\'étape 5:', error);
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(
+    projectUniqueId, 
+    5, 
+    latestConversationUrl, // ✅ Réutiliser le conversationUrl comme le bouton Play
+    {
+      onSuccess: () => {
+        console.log('✅ Étape 5 relancée avec succès en mode debug');
+        // Invalider les caches pour rafraîchir les données
+        queryClient.invalidateQueries({ queryKey: ["conversations", projectUniqueId] });
+      },
+      onError: (error) => {
+        console.error('❌ Erreur lors du relancement de l\'étape 5:', error);
+      }
     }
-  });
+  );
 
   if (isLoading) {
     return (

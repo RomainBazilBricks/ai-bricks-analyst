@@ -20,6 +20,7 @@ import { queryClient } from "@/api/query-config";
 
 interface ConsolidatedDataProps {
   projectUniqueId: string;
+  latestConversationUrl?: string; // ✅ Ajouter le conversationUrl
 }
 
 const formatCurrency = (amount: number | null) => {
@@ -50,20 +51,25 @@ const getBooleanIcon = (value: boolean | null) => {
   return value ? <XCircle className="h-4 w-4 text-red-500" /> : <CheckCircle className="h-4 w-4 text-green-500" />;
 };
 
-export const ConsolidatedDataComponent = ({ projectUniqueId }: ConsolidatedDataProps) => {
+export const ConsolidatedDataComponent = ({ projectUniqueId, latestConversationUrl }: ConsolidatedDataProps) => {
   const { data: consolidatedData, isLoading, isError } = useGetConsolidatedData(projectUniqueId);
   
   // ✅ Hook pour relancer l'étape 2 (Consolidation des données)
-  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 2, {
-    onSuccess: () => {
-      console.log('✅ Étape 2 relancée avec succès en mode debug');
-      // Invalider les caches pour rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ["consolidated-data", projectUniqueId] });
-    },
-    onError: (error) => {
-      console.error('❌ Erreur lors du relancement de l\'étape 2:', error);
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(
+    projectUniqueId, 
+    2, 
+    latestConversationUrl, // ✅ Réutiliser le conversationUrl comme le bouton Play
+    {
+      onSuccess: () => {
+        console.log('✅ Étape 2 relancée avec succès en mode debug');
+        // Invalider les caches pour rafraîchir les données
+        queryClient.invalidateQueries({ queryKey: ["consolidated-data", projectUniqueId] });
+      },
+      onError: (error) => {
+        console.error('❌ Erreur lors du relancement de l\'étape 2:', error);
+      }
     }
-  });
+  );
 
   if (isLoading) {
     return (

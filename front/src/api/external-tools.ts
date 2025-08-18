@@ -112,8 +112,14 @@ export const useSendMessageToTool = (options: Partial<UseMutationOptions<SendMes
 /**
  * ✅ Hook pour relancer une étape spécifique en mode debug (sans déclencher l'étape suivante)
  * Utilise les étapes d'analyse pour récupérer le prompt correspondant
+ * Réutilise le conversationUrl de la session comme le bouton Play
  */
-export const useRetryStep = (projectUniqueId: string, stepOrder: number, options: Partial<UseMutationOptions<SendMessageResponse, Error, void>> = {}) => {
+export const useRetryStep = (
+  projectUniqueId: string, 
+  stepOrder: number, 
+  conversationUrl?: string,
+  options: Partial<UseMutationOptions<SendMessageResponse, Error, void>> = {}
+) => {
   const { mutateAsync: sendMessage } = useSendMessageToTool();
   
   return useMutation<SendMessageResponse, Error, void>({
@@ -138,12 +144,20 @@ export const useRetryStep = (projectUniqueId: string, stepOrder: number, options
         processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
       }
 
-      // Envoyer le message en mode debug
+      console.log('🔄 Relance de l\'étape avec conversationUrl:', {
+        stepOrder,
+        stepName: targetStep.name,
+        hasConversationUrl: !!conversationUrl,
+        conversationUrl
+      });
+
+      // Envoyer le message en mode debug avec conversationUrl si disponible
       return await sendMessage({
         message: processedPrompt,
         platform: 'manus',
         projectUniqueId,
         debugMode: true, // ✅ Mode debug activé
+        ...(conversationUrl && { conversation_url: conversationUrl }), // ✅ Réutiliser le conversationUrl comme le bouton Play
       });
     },
     ...options,

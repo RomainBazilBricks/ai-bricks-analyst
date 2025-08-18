@@ -109,16 +109,21 @@ export const ProjectDetailPage = () => {
   });
 
   // ✅ Hook pour relancer l'étape 4 (Forces et faiblesses)
-  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId!, 4, {
-    onSuccess: () => {
-      console.log('✅ Étape 4 relancée avec succès en mode debug');
-      // Invalider les caches pour rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ["strengths", projectUniqueId] });
-    },
-    onError: (error) => {
-      console.error('❌ Erreur lors du relancement de l\'étape 4:', error);
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(
+    projectUniqueId!, 
+    4, 
+    effectiveLatestConversation?.url, // ✅ Réutiliser le conversationUrl comme le bouton Play
+    {
+      onSuccess: () => {
+        console.log('✅ Étape 4 relancée avec succès en mode debug');
+        // Invalider les caches pour rafraîchir les données
+        queryClient.invalidateQueries({ queryKey: ["strengths", projectUniqueId] });
+      },
+      onError: (error) => {
+        console.error('❌ Erreur lors du relancement de l\'étape 4:', error);
+      }
     }
-  });
+  );
 
   // Hook pour envoyer un message à l'outil externe
   const { mutateAsync: sendMessage, isPending: isSending, isError: isSendError, error: sendError } = useSendMessageToTool({
@@ -758,7 +763,10 @@ export const ProjectDetailPage = () => {
 
             {/* 3. Données consolidées */}
             <div>
-              <ConsolidatedDataComponent projectUniqueId={projectUniqueId!} />
+              <ConsolidatedDataComponent 
+                projectUniqueId={projectUniqueId!} 
+                latestConversationUrl={effectiveLatestConversation?.url}
+              />
             </div>
 
             {/* Séparateur */}
@@ -802,12 +810,18 @@ export const ProjectDetailPage = () => {
 
       {/* Documents manquants */}
       <div className="mb-8">
-        <MissingDocuments projectUniqueId={projectUniqueId!} />
+        <MissingDocuments 
+          projectUniqueId={projectUniqueId!} 
+          latestConversationUrl={effectiveLatestConversation?.url}
+        />
       </div>
 
         {/* Messagerie - Conversations */}
         <div className="mb-8">
-          <ProjectConversations projectUniqueId={projectUniqueId!} />
+          <ProjectConversations 
+            projectUniqueId={projectUniqueId!} 
+            latestConversationUrl={effectiveLatestConversation?.url}
+          />
         </div>
       </div>
     </div>

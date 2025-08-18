@@ -21,9 +21,7 @@ import {
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 
-interface MissingDocumentsProps {
-  projectUniqueId: string;
-}
+
 
 const DocumentRow = ({ doc, projectUniqueId }: { 
   doc: MissingDocument; 
@@ -154,22 +152,32 @@ const DocumentRow = ({ doc, projectUniqueId }: {
   );
 };
 
-export const MissingDocuments = ({ projectUniqueId }: MissingDocumentsProps) => {
+interface MissingDocumentsProps {
+  projectUniqueId: string;
+  latestConversationUrl?: string; // ✅ Ajouter le conversationUrl
+}
+
+export const MissingDocuments = ({ projectUniqueId, latestConversationUrl }: MissingDocumentsProps) => {
   const { data: missingDocuments, isLoading, isError } = useGetMissingDocuments(projectUniqueId);
   const [showResolved, setShowResolved] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
   
   // ✅ Hook pour relancer l'étape 3 (Documents manquants)
-  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(projectUniqueId, 3, {
-    onSuccess: () => {
-      console.log('✅ Étape 3 relancée avec succès en mode debug');
-      // Invalider les caches pour rafraîchir les données
-      queryClient.invalidateQueries({ queryKey: ["missing-documents", projectUniqueId] });
-    },
-    onError: (error) => {
-      console.error('❌ Erreur lors du relancement de l\'étape 3:', error);
+  const { mutateAsync: retryStep, isPending: isRetrying } = useRetryStep(
+    projectUniqueId, 
+    3, 
+    latestConversationUrl, // ✅ Réutiliser le conversationUrl comme le bouton Play
+    {
+      onSuccess: () => {
+        console.log('✅ Étape 3 relancée avec succès en mode debug');
+        // Invalider les caches pour rafraîchir les données
+        queryClient.invalidateQueries({ queryKey: ["missing-documents", projectUniqueId] });
+      },
+      onError: (error) => {
+        console.error('❌ Erreur lors du relancement de l\'étape 3:', error);
+      }
     }
-  });
+  );
 
   if (isLoading) {
     return (
