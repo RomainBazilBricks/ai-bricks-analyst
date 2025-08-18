@@ -1140,7 +1140,14 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       });
     }
 
-    // Créer les documents manquants
+    // ✅ ÉCRASEMENT : Supprimer les documents manquants existants pour ce projet
+    await db
+      .delete(missing_documents)
+      .where(eq(missing_documents.projectId, project[0].id));
+
+    console.log(`🗑️ Documents manquants existants supprimés pour le projet ${projectUniqueId}`);
+
+    // Créer les nouveaux documents manquants
     const documentsToCreate = validatedData.missingDocuments.map(doc => ({
       projectId: project[0].id,
       name: doc.name,
@@ -1156,6 +1163,8 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
       .insert(missing_documents)
       .values(documentsToCreate)
       .returning();
+
+    console.log(`✅ ${createdDocuments.length} nouveaux documents manquants créés pour le projet ${projectUniqueId}`);
 
     // Récupérer l'étape d'analyse avec order = 3 (documents manquants)
     const analysisStep = await db
@@ -1294,7 +1303,14 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
       });
     }
 
-    // Créer les forces et faiblesses
+    // ✅ ÉCRASEMENT : Supprimer les forces/faiblesses existantes pour ce projet
+    await db
+      .delete(strengths_and_weaknesses)
+      .where(eq(strengths_and_weaknesses.projectId, project[0].id));
+
+    console.log(`🗑️ Forces/faiblesses existantes supprimées pour le projet ${projectUniqueId}`);
+
+    // Créer les nouvelles forces et faiblesses
     const itemsToCreate = validatedData.strengthsAndWeaknesses.map((item: any) => ({
       projectId: project[0].id,
       type: item.type,
@@ -1313,6 +1329,8 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
       .insert(strengths_and_weaknesses)
       .values(itemsToCreate)
       .returning();
+
+    console.log(`✅ ${createdItems.length} nouvelles forces/faiblesses créées pour le projet ${projectUniqueId}`);
 
     // Récupérer l'étape d'analyse avec order = 4 (points de vigilance)
     const analysisStep = await db
@@ -1422,7 +1440,47 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
       });
     }
 
-    // Créer une entrée dans la table conversations
+    // ✅ GESTION MESSAGES : Logique draft vs nouveau message
+    // Vérifier d'abord l'état du workflow step pour cette étape
+    const analysisStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 5),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    let isDraftMode = false;
+    if (analysisStep.length > 0) {
+      const workflowStep = await db
+        .select()
+        .from(project_analysis_progress)
+        .where(
+          and(
+            eq(project_analysis_progress.projectId, project[0].id),
+            eq(project_analysis_progress.stepId, analysisStep[0].id)
+          )
+        )
+        .limit(1);
+      
+      // Si l'étape est encore "in_progress", on est en mode draft
+      isDraftMode = workflowStep.length > 0 && workflowStep[0].status === 'in_progress';
+    }
+
+    if (isDraftMode) {
+      // MODE DRAFT : Supprimer les messages IA existants pour cette session et les remplacer
+      await db
+        .delete(conversations)
+        .where(and(
+          eq(conversations.sessionId, recentSession[0].id),
+          eq(conversations.sender, 'IA')
+        ));
+      
+      console.log(`🗑️ Messages IA existants supprimés (mode draft) pour le projet ${projectUniqueId}`);
+    }
+
+    // Créer le nouveau message (que ce soit en mode draft ou nouveau)
     await db
       .insert(conversations)
       .values({
@@ -1433,16 +1491,9 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
         attachments: [],
       });
 
-    // Récupérer l'étape d'analyse avec order = 5 (message final)
-    const analysisStep = await db
-      .select()
-      .from(analysis_steps)
-      .where(and(
-        eq(analysis_steps.order, 5),
-        eq(analysis_steps.isActive, 1)
-      ))
-      .limit(1);
+    console.log(`✅ ${isDraftMode ? 'Message draft mis à jour' : 'Nouveau message créé'} pour le projet ${projectUniqueId}`);
 
+    // Utiliser l'étape d'analyse déjà récupérée plus haut (analysisStep)
     if (analysisStep.length === 0) {
       return res.status(404).json({ 
         error: 'Étape d\'analyse non trouvée (order = 5)',
@@ -1450,7 +1501,6 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
       });
     }
 
-    // Mettre à jour l'étape du workflow (étape 5)
     const workflowStep = await db
       .select()
       .from(project_analysis_progress)
