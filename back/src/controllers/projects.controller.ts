@@ -30,6 +30,24 @@ import type {
 } from '@shared/types/projects';
 
 /**
+ * Nettoie une URL en supprimant les duplications de protocole
+ * @param url URL à nettoyer
+ * @returns URL nettoyée
+ */
+function cleanUrl(url: string): string {
+  if (!url || typeof url !== 'string') {
+    return url;
+  }
+  
+  // Supprimer les duplications de protocole comme "https:https://" -> "https://"
+  const cleanedUrl = url.replace(/^(https?:)+(https?:\/\/)/, '$2');
+  
+  console.log(`🧹 URL nettoyée: "${url}" -> "${cleanedUrl}"`);
+  
+  return cleanedUrl;
+}
+
+/**
  * Crée un nouveau projet
  * @route POST /api/projects
  * @param {CreateProjectInput} req.body - Données du projet
@@ -105,7 +123,10 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
       const existingHashes = new Set(existingDocuments.map(doc => doc.hash));
       
       for (let index = 0; index < projectData.fileUrls.length; index++) {
-        const bubbleUrl = projectData.fileUrls[index];
+        const rawBubbleUrl = projectData.fileUrls[index];
+        
+        // Nettoyer l'URL en cas de duplication du protocole
+        const bubbleUrl = cleanUrl(rawBubbleUrl);
         
         try {
           console.log(`📥 Conversion S3 du document ${index + 1}/${projectData.fileUrls.length}: ${bubbleUrl}`);
@@ -142,7 +163,7 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
         } catch (error) {
           console.error(`❌ Erreur conversion S3 document ${index + 1}:`, error);
           
-          // En cas d'erreur, stocker l'URL Bubble avec statut ERROR
+          // En cas d'erreur, stocker l'URL Bubble nettoyée avec statut ERROR
           const errorHash = `error-${Date.now()}-${index}`;
           
           // Vérifier si ce hash d'erreur existe déjà (peu probable mais sécurise)
@@ -150,7 +171,7 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
             documentsToInsert.push({
               sessionId: newSession[0].id,
               fileName: `Document_${index + 1}_ERROR`,
-              url: bubbleUrl, // URL Bubble en fallback
+              url: bubbleUrl, // URL Bubble nettoyée en fallback
               hash: errorHash,
               mimeType: 'application/pdf',
               size: 0,
