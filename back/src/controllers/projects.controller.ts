@@ -637,7 +637,11 @@ export const downloadDocument = async (req: Request, res: Response): Promise<any
     
     // Configurer les headers de réponse
     res.setHeader('Content-Type', doc.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${doc.fileName}"`);
+    
+    // Encoder correctement le nom de fichier pour éviter les erreurs avec les caractères spéciaux
+    const encodedFileName = encodeURIComponent(doc.fileName);
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+    
     res.setHeader('Content-Length', doc.size.toString());
     res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1h
     
