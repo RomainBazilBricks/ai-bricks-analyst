@@ -166,14 +166,12 @@ router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
 router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
 
 /**
- * Endpoint pour recevoir les points de vigilance/forces et faiblesses de l'IA (Étape 4)
- * @route POST /api/workflow/vigilance-points/:projectUniqueId
+ * Endpoint pour recevoir les forces et faiblesses de l'IA (Étape 4)
  * @route POST /api/workflow/strengths-and-weaknesses/:projectUniqueId
- * @param {StrengthsWeaknessesPayload} body - Liste des forces, faiblesses et points de vigilance
+ * @param {StrengthsWeaknessesPayload} body - Liste des forces et faiblesses
  * @returns {StrengthsWeaknessesResponse} Confirmation et points créés
  * @access Public (pour IA)
  */
-router.post('/vigilance-points/:projectUniqueId', receiveStrengthsAndWeaknesses);
 router.post('/strengths-and-weaknesses/:projectUniqueId', receiveStrengthsAndWeaknesses);
 
 /**
