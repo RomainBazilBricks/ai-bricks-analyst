@@ -15,6 +15,7 @@ export type Project = {
   estimatedRoi: number;
   startDate: Date;
   fundingExpectedDate: Date;
+  zipUrl?: string; // URL du dernier ZIP généré pour ce projet
   createdAt: Date;
   updatedAt: Date;
   // Relations

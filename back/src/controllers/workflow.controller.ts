@@ -1765,6 +1765,16 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
         eq(project_analysis_progress.stepId, step0[0].id)
       ));
 
+    // Sauvegarder l'URL du ZIP dans la table projects
+    console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet: ${zipResult.s3Url}`);
+    await db
+      .update(projects)
+      .set({
+        zipUrl: zipResult.s3Url,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project[0].id));
+
     // Déclencher automatiquement l'étape suivante seulement si ce n'est pas un fallback d'erreur
     let triggerResult = { success: false };
     if (!isErrorFallback) {

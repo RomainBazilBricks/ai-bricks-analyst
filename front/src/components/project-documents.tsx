@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useGetProjectDocuments, useDeleteDocument, useDeleteAllDocuments } from "@/api/projects";
+import { useGetProjectDocuments, useDeleteDocument, useDeleteAllDocuments, useGetProjectById } from "@/api/projects";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Trash2
+  Trash2,
+  Package
 } from "lucide-react";
 import type { DocumentResponse } from "@shared/types/projects";
 
@@ -107,6 +108,12 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
     error,
     refetch
   } = useGetProjectDocuments(projectUniqueId, { enabled: !!projectUniqueId });
+
+  // Récupérer les informations du projet pour avoir accès au zipUrl
+  const {
+    data: project,
+    isLoading: isProjectLoading
+  } = useGetProjectById(projectUniqueId, { enabled: !!projectUniqueId });
 
   const handleOpenDocument = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -285,6 +292,48 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
       </CardHeader>
       <CardContent>
+        {/* Section ZIP si disponible */}
+        {project?.zipUrl && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3 flex-1">
+                <Package className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-blue-900 mb-1">
+                    Archive complète des documents
+                  </h4>
+                  <p className="text-sm text-blue-700 mb-3">
+                    Fichier ZIP contenant tous les documents du projet, généré automatiquement lors de l'analyse.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenDocument(project.zipUrl!)}
+                      className="flex items-center gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Ouvrir le ZIP
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadDocument(project.zipUrl!, `${project.projectName}-documents.zip`)}
+                      className="flex items-center gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Download className="h-3 w-3" />
+                      Télécharger le ZIP
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                Archive
+              </Badge>
+            </div>
+          </div>
+        )}
+        
         <div className="space-y-4">
           {documents.map((document: DocumentResponse) => (
             <div 

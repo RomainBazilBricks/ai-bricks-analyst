@@ -81,6 +81,7 @@ export const projects = pgTable('projects', {
   estimatedRoi: decimal('estimated_roi', { precision: 5, scale: 2 }).notNull(), // ROI percentage
   startDate: timestamp('start_date').notNull(), // Start date
   fundingExpectedDate: timestamp('funding_expected_date').notNull(), // Date funding is needed
+  zipUrl: text('zip_url'), // URL du dernier ZIP généré pour ce projet
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
