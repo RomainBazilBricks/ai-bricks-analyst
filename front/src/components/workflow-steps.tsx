@@ -510,8 +510,11 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                                   stepOrder,
                                   stepName: (step as any).step?.name || (step as any).name,
                                   stepId: (step as any).step?.id || (step as any).id,
+                                  stepObject: (step as any).step,
+                                  stepDirectOrder: (step as any).order,
                                   fullStep: step
                                 });
+                                console.log('🔍 DEBUG: Structure complète de step.step:', (step as any).step);
                                 
                                 if (stepOrder === 0) {
                                   console.log('✅ Déclenchement handleTriggerStep0');
