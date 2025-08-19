@@ -111,8 +111,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
   // Récupérer les informations du projet pour avoir accès au zipUrl
   const {
-    data: project,
-    isLoading: isProjectLoading
+    data: project
   } = useGetProjectById(projectUniqueId, { enabled: !!projectUniqueId });
 
   const handleOpenDocument = (url: string) => {
