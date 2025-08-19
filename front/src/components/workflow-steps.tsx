@@ -471,7 +471,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0">
-                        {getStepIcon((step as any).step?.order || (step as any).order)}
+                        {getStepIcon((step as any).step?.order ?? (step as any).order)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
@@ -503,9 +503,9 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                               variant="ghost"
                               size="sm"
                               className="h-6 w-6 p-0"
-                              title={((step as any).step?.order || (step as any).order) === 0 ? "Déclencher l'upload ZIP" : "Envoyer à l'IA"}
+                              title={((step as any).step?.order ?? (step as any).order) === 0 ? "Déclencher l'upload ZIP" : "Envoyer à l'IA"}
                               onClick={() => {
-                                const stepOrder = (step as any).step?.order || (step as any).order;
+                                const stepOrder = (step as any).step?.order ?? (step as any).order;
                                 console.log('🎯 DEBUG: Clic sur bouton Play:', {
                                   stepOrder,
                                   stepName: (step as any).step?.name || (step as any).name,
@@ -636,7 +636,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
               </Button>
               <Button 
                 onClick={() => {
-                  const stepOrder = selectedPrompt.step.step?.order || selectedPrompt.step.order;
+                  const stepOrder = selectedPrompt.step.step?.order ?? selectedPrompt.step.order;
                   console.log('🎯 DEBUG: Clic sur bouton Modal "Envoyer à l\'IA":', {
                     stepOrder,
                     stepName: selectedPrompt.step.step?.name || selectedPrompt.step.name,
