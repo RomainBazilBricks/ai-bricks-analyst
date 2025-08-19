@@ -142,13 +142,18 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     if (projectData.fileUrls && projectData.fileUrls.length > 0) {
       const documentsToInsert = [];
       
-      // Récupérer les hash existants pour cette session pour éviter les doublons
+      // Récupérer les documents existants pour TOUT LE PROJET pour éviter les doublons (par nom de fichier)
       const existingDocuments = await db
-        .select({ hash: documents.hash })
+        .select({ 
+          hash: documents.hash,
+          fileName: documents.fileName 
+        })
         .from(documents)
-        .where(eq(documents.sessionId, newSession[0].id));
+        .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+        .where(eq(sessions.projectId, project.id));
       
       const existingHashes = new Set(existingDocuments.map(doc => doc.hash));
+      const existingFileNames = new Set(existingDocuments.map(doc => doc.fileName));
       
       for (let index = 0; index < projectData.fileUrls.length; index++) {
         const rawBubbleUrl = projectData.fileUrls[index];
@@ -166,8 +171,8 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
             // Ne pas passer de nom de fichier pour laisser la fonction extraire le nom original
           );
           
-          // Vérifier si ce document existe déjà (par hash)
-          if (existingHashes.has(s3Result.hash)) {
+          // Vérifier si ce document existe déjà (par nom de fichier)
+          if (existingFileNames.has(s3Result.fileName)) {
             console.log(`⚠️ Document ${index + 1} ignoré (déjà existant): ${s3Result.fileName}`);
             continue;
           }
@@ -183,8 +188,8 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
             uploadedAt: new Date(),
           });
           
-          // Ajouter le hash à notre set pour éviter les doublons dans cette même requête
-          existingHashes.add(s3Result.hash);
+          // Ajouter le nom de fichier à notre set pour éviter les doublons dans cette même requête
+          existingFileNames.add(s3Result.fileName);
           
           console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
           
@@ -194,11 +199,12 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
           // En cas d'erreur, stocker l'URL Bubble nettoyée avec statut ERROR
           const errorHash = `error-${Date.now()}-${index}`;
           
-          // Vérifier si ce hash d'erreur existe déjà (peu probable mais sécurise)
-          if (!existingHashes.has(errorHash)) {
+          // Vérifier si ce nom de fichier d'erreur existe déjà (peu probable mais sécurise)
+          const errorFileName = `Document_${index + 1}_ERROR`;
+          if (!existingFileNames.has(errorFileName)) {
             documentsToInsert.push({
               sessionId: newSession[0].id,
-              fileName: `Document_${index + 1}_ERROR`,
+              fileName: errorFileName,
               url: bubbleUrl, // URL Bubble nettoyée en fallback
               hash: errorHash,
               mimeType: 'application/pdf',
@@ -207,7 +213,7 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
               uploadedAt: new Date(),
             });
             
-            existingHashes.add(errorHash);
+            existingFileNames.add(errorFileName);
           }
         }
       }
