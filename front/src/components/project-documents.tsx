@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGetProjectDocuments, useDeleteDocument, useDeleteAllDocuments, useGetProjectById } from "@/api/projects";
+import { useGenerateZipOnly } from "@/api/workflow";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +115,19 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
     data: project
   } = useGetProjectById(projectUniqueId, { enabled: !!projectUniqueId });
 
+  // Hook pour générer le ZIP uniquement (sans déclencher l'IA)
+  const { mutateAsync: generateZip, isPending: isGeneratingZip } = useGenerateZipOnly({
+    onSuccess: (data: any) => {
+      console.log('✅ ZIP généré avec succès:', data);
+      // Invalider les queries pour rafraîchir les données du projet
+      queryClient.invalidateQueries({ queryKey: ["projects", projectUniqueId] });
+      queryClient.invalidateQueries({ queryKey: ["projects", projectUniqueId, "documents"] });
+    },
+    onError: (error: any) => {
+      console.error('❌ Erreur lors de la génération du ZIP:', error);
+    }
+  });
+
   const handleOpenDocument = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
@@ -184,6 +198,14 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
   const cancelDeleteAllDocuments = () => {
     setShowDeleteAllConfirm(false);
+  };
+
+  const handleGenerateZip = async () => {
+    try {
+      await generateZip({ projectUniqueId });
+    } catch (error) {
+      console.error('Erreur lors de la génération du ZIP:', error);
+    }
   };
 
   if (isLoading) {
@@ -291,8 +313,8 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
 
       </CardHeader>
       <CardContent>
-        {/* Section ZIP si disponible */}
-        {project?.zipUrl && (
+        {/* Section ZIP */}
+        {project?.zipUrl ? (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3 flex-1">
@@ -304,7 +326,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                   <p className="text-sm text-blue-700 mb-3">
                     Fichier ZIP contenant tous les documents du projet, généré automatiquement lors de l'analyse.
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Button
                       variant="outline"
                       size="sm"
@@ -323,6 +345,25 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                       <Download className="h-3 w-3" />
                       Télécharger le ZIP
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateZip}
+                      disabled={isGeneratingZip}
+                      className="flex items-center gap-1 border-green-300 text-green-700 hover:bg-green-100"
+                    >
+                      {isGeneratingZip ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Génération...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3" />
+                          Régénérer
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -331,6 +372,46 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
               </Badge>
             </div>
           </div>
+        ) : (
+          documents && documents.length > 0 && (
+            <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3 flex-1">
+                  <Package className="h-5 w-5 text-gray-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900 mb-1">
+                      Archive des documents
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Générez un fichier ZIP contenant tous les documents du projet pour l'analyse.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateZip}
+                      disabled={isGeneratingZip}
+                      className="flex items-center gap-1 border-green-300 text-green-700 hover:bg-green-100"
+                    >
+                      {isGeneratingZip ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Génération...
+                        </>
+                      ) : (
+                        <>
+                          <Package className="h-3 w-3" />
+                          Générer ZIP
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="bg-gray-100 text-gray-800">
+                  À générer
+                </Badge>
+              </div>
+            </div>
+          )
         )}
         
         <div className="space-y-4">

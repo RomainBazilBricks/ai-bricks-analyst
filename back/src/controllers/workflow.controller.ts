@@ -1608,17 +1608,27 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     // Récupérer tous les documents du projet via les sessions
     console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
-    const projectDocuments = await db
+    
+    // D'abord, voir tous les documents (peu importe le statut)
+    const allDocuments = await db
       .select({
         fileName: documents.fileName,
         url: documents.url,
+        status: documents.status,
+        sessionId: documents.sessionId,
       })
       .from(documents)
       .innerJoin(sessions, eq(documents.sessionId, sessions.id))
-      .where(and(
-        eq(sessions.projectId, project[0].id),
-        eq(documents.status, 'PROCESSED')
-      ));
+      .where(eq(sessions.projectId, project[0].id));
+    
+    console.log(`📊 Tous les documents du projet (${allDocuments.length} total):`);
+    allDocuments.forEach((doc, index) => {
+      console.log(`   ${index + 1}. ${doc.fileName} - Status: ${doc.status} - URL: ${doc.url}`);
+    });
+    
+    // Maintenant, filtrer seulement les PROCESSED
+    const projectDocuments = allDocuments.filter(doc => doc.status === 'PROCESSED');
+    console.log(`📄 Documents avec statut PROCESSED: ${projectDocuments.length}/${allDocuments.length}`);
 
     if (projectDocuments.length === 0) {
       console.log(`❌ Aucun document trouvé pour le projet ${projectUniqueId}`);
@@ -1820,6 +1830,137 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     res.status(500).json({
       error: error.message || 'Erreur lors de l\'upload ZIP',
       code: 'UPLOAD_ZIP_ERROR'
+    });
+  }
+};
+
+/**
+ * Génère uniquement le ZIP des documents sans déclencher l'IA
+ * @route POST /api/workflow/generate-zip-only
+ */
+export const generateZipOnly = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.body;
+
+    if (!projectUniqueId) {
+      return res.status(400).json({
+        error: 'ProjectUniqueId est requis',
+        code: 'MISSING_PROJECT_UNIQUE_ID'
+      });
+    }
+
+    console.log(`📦 Génération ZIP uniquement pour le projet: ${projectUniqueId}`);
+
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      console.log(`❌ Projet non trouvé: ${projectUniqueId}`);
+      return res.status(404).json({
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    console.log(`✅ Projet trouvé: ${project[0].projectName} (ID: ${project[0].id})`);
+
+    // Récupérer tous les documents du projet via les sessions
+    console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
+    
+    // D'abord, voir tous les documents (peu importe le statut)
+    const allDocuments = await db
+      .select({
+        fileName: documents.fileName,
+        url: documents.url,
+        status: documents.status,
+        sessionId: documents.sessionId,
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(eq(sessions.projectId, project[0].id));
+    
+    console.log(`📊 Tous les documents du projet (${allDocuments.length} total):`);
+    allDocuments.forEach((doc, index) => {
+      console.log(`   ${index + 1}. ${doc.fileName} - Status: ${doc.status} - URL: ${doc.url}`);
+    });
+    
+    // Maintenant, filtrer seulement les PROCESSED
+    const projectDocuments = allDocuments.filter(doc => doc.status === 'PROCESSED');
+    console.log(`📄 Documents avec statut PROCESSED: ${projectDocuments.length}/${allDocuments.length}`);
+
+    if (projectDocuments.length === 0) {
+      console.log(`❌ Aucun document PROCESSED trouvé pour le projet ${projectUniqueId}`);
+      return res.status(400).json({
+        error: 'Aucun document traité trouvé pour ce projet',
+        code: 'NO_PROCESSED_DOCUMENTS_FOUND'
+      });
+    }
+
+    console.log(`📄 ${projectDocuments.length} documents trouvés pour le projet ${projectUniqueId}`);
+    projectDocuments.forEach((doc, index) => {
+      console.log(`   ${index + 1}. ${doc.fileName} - ${doc.url}`);
+    });
+
+    // Créer le ZIP et l'uploader vers S3
+    console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
+    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId);
+    console.log(`✅ ZIP créé avec succès:`, {
+      fileName: zipResult.fileName,
+      s3Url: zipResult.s3Url,
+      size: zipResult.size,
+      hash: zipResult.hash
+    });
+
+    // Vérifier si le ZIP semble anormalement petit (probablement des fichiers manquants)
+    const expectedMinSize = projectDocuments.length * 10000; // ~10KB par document minimum
+    if (zipResult.size < expectedMinSize && projectDocuments.length > 2) {
+      console.warn(`⚠️ ZIP suspicieusement petit: ${zipResult.size} bytes pour ${projectDocuments.length} documents`);
+      console.warn(`⚠️ Taille attendue minimum: ${expectedMinSize} bytes`);
+      console.warn(`⚠️ Possible problème: fichiers manquants sur S3`);
+    }
+
+    // Sauvegarder l'URL du ZIP dans la table projects
+    console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet: ${zipResult.s3Url}`);
+    await db
+      .update(projects)
+      .set({
+        zipUrl: zipResult.s3Url,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project[0].id));
+
+    console.log(`✅ ZIP généré avec succès pour le projet: ${projectUniqueId}`);
+
+    res.status(200).json({
+      message: 'ZIP généré avec succès',
+      projectUniqueId,
+      zipUrl: zipResult.s3Url,
+      zipFileName: zipResult.fileName,
+      zipSize: zipResult.size,
+      documentCount: projectDocuments.length
+    });
+
+  } catch (error: any) {
+    const { projectUniqueId } = req.body;
+    console.error(`❌ Erreur lors de la génération du ZIP pour le projet ${projectUniqueId || 'INCONNU'}:`);
+    console.error(`📄 Type d'erreur:`, error.constructor.name);
+    console.error(`📄 Message d'erreur:`, error.message);
+    
+    if (error.response) {
+      console.error(`📊 Status de l'erreur HTTP:`, error.response.status);
+      console.error(`📋 Headers de l'erreur:`, error.response.headers);
+      console.error(`📄 Corps de l'erreur:`, error.response.data);
+    }
+    
+    console.error(`🔍 Stack trace:`, error.stack);
+    
+    res.status(500).json({
+      error: error.message || 'Erreur lors de la génération du ZIP',
+      code: 'GENERATE_ZIP_ERROR'
     });
   }
 };

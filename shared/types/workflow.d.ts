@@ -154,4 +154,13 @@ export type UploadZipFromUrlResponse = {
   documentCount: number;
   conversationUrl: string;
   nextStepTriggered: boolean;
+};
+
+export type GenerateZipOnlyResponse = {
+  message: string;
+  projectUniqueId: string;
+  zipUrl: string;
+  zipFileName: string;
+  zipSize: number;
+  documentCount: number;
 }; 

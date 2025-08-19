@@ -18,6 +18,7 @@ import {
   receiveStrengthsAndWeaknesses,
   receiveFinalMessage,
   uploadZipFromUrl,
+  generateZipOnly,
   triggerStep1Analysis
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
@@ -202,6 +203,15 @@ router.get('/test-prompt/:projectUniqueId', testPromptProcessing);
  * @access Public (pour déclencher l'étape 0)
  */
 router.post('/generate-zip-from-documents', uploadZipFromUrl);
+
+/**
+ * Endpoint pour générer uniquement un ZIP des documents (sans déclencher l'IA)
+ * @route POST /api/workflow/generate-zip-only
+ * @param {object} body - Données contenant le projectUniqueId
+ * @returns {Object} Détails du ZIP créé
+ * @access Public (pour régénérer le ZIP)
+ */
+router.post('/generate-zip-only', generateZipOnly);
 
 /**
  * Endpoint pour déclencher manuellement l'étape 1: Analyse globale

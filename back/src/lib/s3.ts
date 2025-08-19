@@ -177,7 +177,15 @@ export function getS3KeyFromHash(projectUniqueId: string, hash: string, fileName
 export function extractS3KeyFromUrl(s3Url: string): string {
   try {
     const url = new URL(s3Url);
-    return url.pathname.substring(1); // Enlever le "/" initial
+    let key = url.pathname.substring(1); // Enlever le "/" initial
+    
+    // IMPORTANT: Décoder l'URL pour éviter les problèmes d'encoding avec AWS SDK
+    key = decodeURIComponent(key);
+    
+    console.log(`🔑 S3 Key original: ${url.pathname.substring(1)}`);
+    console.log(`🔑 S3 Key décodé: ${key}`);
+    
+    return key;
   } catch {
     throw new Error('Invalid S3 URL format');
   }
@@ -250,20 +258,39 @@ export async function createZipFromDocuments(
       });
     });
 
-    // Ajouter chaque document au ZIP
-    for (const doc of documents) {
-      try {
-        console.log(`📄 Ajout du document: ${doc.fileName}`);
-        const fileBuffer = await downloadFileFromS3(doc.url);
-        
-        // Nettoyer le nom de fichier pour éviter les problèmes de chemin
-        const cleanFileName = doc.fileName.replace(/[<>:"/\\|?*]/g, '_');
-        archive.append(fileBuffer, { name: cleanFileName });
-      } catch (error) {
-        console.warn(`⚠️ Impossible d'ajouter le document ${doc.fileName}:`, error);
-        // Continuer avec les autres documents même si un échoue
-      }
+      // Compteurs pour le suivi
+  let successCount = 0;
+  let failureCount = 0;
+  const failedDocuments: string[] = [];
+
+  // Ajouter chaque document au ZIP
+  for (const doc of documents) {
+    try {
+      console.log(`📄 Tentative d'ajout du document: ${doc.fileName}`);
+      console.log(`🔗 URL S3: ${doc.url}`);
+      
+      const fileBuffer = await downloadFileFromS3(doc.url);
+      
+      // Nettoyer le nom de fichier pour éviter les problèmes de chemin
+      const cleanFileName = doc.fileName.replace(/[<>:"/\\|?*]/g, '_');
+      archive.append(fileBuffer, { name: cleanFileName });
+      
+      successCount++;
+      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${successCount}/${documents.length})`);
+    } catch (error) {
+      failureCount++;
+      failedDocuments.push(doc.fileName);
+      console.warn(`❌ Impossible d'ajouter le document ${doc.fileName} (${failureCount} échecs):`, error);
+      // Continuer avec les autres documents même si un échoue
     }
+  }
+
+  console.log(`📊 Résumé de l'ajout des documents:`);
+  console.log(`   ✅ Succès: ${successCount}/${documents.length}`);
+  console.log(`   ❌ Échecs: ${failureCount}/${documents.length}`);
+  if (failedDocuments.length > 0) {
+    console.log(`   📋 Documents échoués: ${failedDocuments.join(', ')}`);
+  }
 
     // Finaliser l'archive
     archive.finalize();
