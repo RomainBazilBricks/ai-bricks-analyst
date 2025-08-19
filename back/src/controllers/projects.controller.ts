@@ -76,8 +76,10 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
       };
       
       // Seulement ajouter conversation si elle est définie et non vide
-      if (projectData.conversation && projectData.conversation.trim() !== '') {
-        updateData.conversation = projectData.conversation.trim();
+      // Prioriser le champ 'conversations' (Bubble) puis 'conversation'
+      const conversationData = projectData.conversations || projectData.conversation;
+      if (conversationData && conversationData.trim() !== '') {
+        updateData.conversation = conversationData.trim();
       }
       
       // Seulement ajouter fiche si elle est définie et non vide
@@ -111,7 +113,10 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
           estimatedRoi: (projectData.estimatedRoi || 0).toString(),
           startDate: new Date(projectData.startDate || new Date().toISOString()),
           fundingExpectedDate: new Date(projectData.fundingExpectedDate || new Date().toISOString()),
-          conversation: (projectData.conversation && projectData.conversation.trim() !== '') ? projectData.conversation.trim() : null,
+          conversation: (() => {
+            const conversationData = projectData.conversations || projectData.conversation;
+            return (conversationData && conversationData.trim() !== '') ? conversationData.trim() : null;
+          })(),
           fiche: (projectData.fiche && projectData.fiche.trim() !== '') ? projectData.fiche.trim() : null,
           createdAt: new Date(),
           updatedAt: new Date(),

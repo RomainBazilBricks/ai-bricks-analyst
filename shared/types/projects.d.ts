@@ -66,6 +66,7 @@ export type CreateProjectInput = {
   fundingExpectedDate?: string; // Optionnel
   fileUrls: string[];
   conversation?: string; // Historique des conversations avec le porteur de projet
+  conversations?: string; // Alias pour conversation (compatibilité Bubble)
   fiche?: string; // Fiche de présentation du projet par le porteur
 };
 
