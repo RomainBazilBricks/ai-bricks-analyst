@@ -702,6 +702,7 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
 export const receiveConsolidatedData = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId } = req.params;
+    const { skipAutoTrigger } = req.query; // ✅ Nouveau paramètre pour le mode debug
     const validatedData = ConsolidatedDataPayloadSchema.parse({ 
       ...req.body, 
       projectUniqueId 
@@ -797,15 +798,32 @@ export const receiveConsolidatedData = async (req: Request, res: Response): Prom
       .where(eq(project_analysis_progress.id, workflowStep[0].workflow.id))
       .returning();
 
-    // Note: Pas de déclenchement automatique de l'étape suivante
-    // C'est Manus qui gère l'ordre et le déclenchement des étapes
+    // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
+    let nextStepTriggered = false;
+    let nextStepError;
+    if (skipAutoTrigger !== 'true') {
+      console.log(`✅ Étape 2 terminée, déclenchement automatique de l'étape 3 pour le projet: ${projectUniqueId}`);
+      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.id || 0);
+      nextStepTriggered = nextStepResult.success;
+      nextStepError = nextStepResult.error;
+      
+      if (nextStepResult.success) {
+        console.log(`🚀 Étape suivante déclenchée automatiquement avec succès`);
+      } else {
+        console.warn(`⚠️ Impossible de déclencher l'étape suivante automatiquement: ${nextStepResult.error}`);
+      }
+    } else {
+      console.log(`🔧 Mode debug activé - étape suivante non déclenchée automatiquement`);
+    }
 
     res.status(200).json({
       success: true,
       message: 'Données consolidées reçues et enregistrées avec succès',
       workflowStepId: updatedStep[0].id,
       data: validatedData.consolidatedData,
-      nextStepTriggered: false
+      nextStepTriggered,
+      nextStepError,
+      debugMode: skipAutoTrigger === 'true'
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1042,6 +1060,7 @@ export const updateMessageStep = async (req: Request, res: Response): Promise<an
 export const receiveAnalysisMacro = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId } = req.params;
+    const { skipAutoTrigger } = req.query; // ✅ Nouveau paramètre pour le mode debug
     const validatedData = AnalysisMacroPayloadSchema.parse({ 
       ...req.body, 
       projectUniqueId 
@@ -1105,14 +1124,32 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
       })
       .where(eq(projects.id, project[0].id));
 
-    // Note: Pas de déclenchement automatique de l'étape suivante
-    // C'est Manus qui gère l'ordre et le déclenchement des étapes
+    // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
+    let nextStepTriggered = false;
+    let nextStepError;
+    if (skipAutoTrigger !== 'true') {
+      console.log(`✅ Étape 1 terminée, déclenchement automatique de l'étape 2 pour le projet: ${projectUniqueId}`);
+      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.id || 0);
+      nextStepTriggered = nextStepResult.success;
+      nextStepError = nextStepResult.error;
+      
+      if (nextStepResult.success) {
+        console.log(`🚀 Étape suivante déclenchée automatiquement avec succès`);
+      } else {
+        console.warn(`⚠️ Impossible de déclencher l'étape suivante automatiquement: ${nextStepResult.error}`);
+      }
+    } else {
+      console.log(`🔧 Mode debug activé - étape suivante non déclenchée automatiquement`);
+    }
 
     res.status(200).json({
       success: true,
       message: 'Analyse macro reçue et enregistrée avec succès',
       workflowStepId: updatedStep[0].id,
-      data: validatedData.macroAnalysis
+      data: validatedData.macroAnalysis,
+      nextStepTriggered,
+      nextStepError,
+      debugMode: skipAutoTrigger === 'true'
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1808,6 +1845,45 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
         eq(project_analysis_progress.projectId, project[0].id),
         eq(project_analysis_progress.stepId, step0[0].id)
       ));
+
+    // Sauvegarder l'URL de conversation dans conversations_with_ai
+    try {
+      // Récupérer la session la plus récente du projet
+      const projectSession = await db
+        .select()
+        .from(sessions)
+        .where(eq(sessions.projectId, project[0].id))
+        .orderBy(desc(sessions.createdAt))
+        .limit(1);
+
+      if (projectSession.length > 0) {
+        // Vérifier si cette URL de conversation existe déjà
+        const existingConversation = await db
+          .select()
+          .from(conversations_with_ai)
+          .where(eq(conversations_with_ai.url, conversationUrl))
+          .limit(1);
+
+        if (existingConversation.length === 0) {
+          // Sauvegarder la nouvelle conversation IA
+          await db
+            .insert(conversations_with_ai)
+            .values({
+              sessionId: projectSession[0].id,
+              url: conversationUrl,
+              model: 'manus',
+              createdAt: new Date(),
+            });
+          
+          console.log(`💾 URL de conversation sauvegardée dans conversations_with_ai: ${conversationUrl}`);
+        } else {
+          console.log(`ℹ️ URL de conversation déjà existante dans conversations_with_ai: ${conversationUrl}`);
+        }
+      }
+    } catch (conversationError) {
+      console.warn(`⚠️ Erreur lors de la sauvegarde de l'URL de conversation:`, conversationError);
+      // Ne pas faire échouer le workflow pour cette erreur
+    }
 
     // Sauvegarder l'URL du ZIP dans la table projects
     console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet: ${zipResult.s3Url}`);
