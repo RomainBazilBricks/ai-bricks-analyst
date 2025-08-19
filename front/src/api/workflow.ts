@@ -125,7 +125,7 @@ export const useUpdateAnalysisStepDefinition = (stepId: number, options = {}) =>
 };
 
 /**
- * Hook pour déclencher l'étape 0: Upload des documents ZIP
+ * Hook pour déclencher l'étape 0: Génère un ZIP des documents et l'envoie à Manus
  */
 export const useTriggerStep0 = (options = {}) =>
   useMutator<{ projectUniqueId: string }, { 
@@ -137,4 +137,4 @@ export const useTriggerStep0 = (options = {}) =>
     documentCount: number; 
     conversationUrl: string; 
     nextStepTriggered: boolean; 
-  }>("/workflow/upload-zip-from-url", options); 
+  }>("/workflow/generate-zip-from-documents", options); 

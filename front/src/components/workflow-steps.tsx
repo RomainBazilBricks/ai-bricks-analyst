@@ -122,9 +122,12 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
       console.log('🚀 Déclenchement de l\'étape 0 (Upload ZIP) pour le projet:', projectUniqueId);
       console.log('📡 Appel de triggerStep0 avec payload:', { projectUniqueId });
       
+      console.log('⏳ Avant l\'appel triggerStep0...');
       const response = await triggerStep0({ projectUniqueId });
+      console.log('⏳ Après l\'appel triggerStep0...');
       
       console.log('📦 Réponse de triggerStep0:', response);
+      console.log('🎉 SUCCESS - ZIP URL reçu:', response.zipUrl);
       
       // Stocker le résultat
       setPromptResults(prev => {

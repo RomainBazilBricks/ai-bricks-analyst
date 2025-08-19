@@ -1713,11 +1713,11 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       console.log(`🔧 URL récupérée depuis les variables d'environnement: ${pythonApiUrl}`);
     }
 
-    console.log(`📡 Envoi du ZIP à l'API Python: ${pythonApiUrl}/send-message`);
+    console.log(`📡 Envoi du ZIP à l'API Python: ${pythonApiUrl}/upload-zip-from-url`);
     console.log(`📄 Payload JSON complet:`);
     console.log(JSON.stringify(payload, null, 2));
 
-    const response = await axios.post(`${pythonApiUrl}/send-message`, payload, {
+    const response = await axios.post(`${pythonApiUrl}/upload-zip-from-url`, payload, {
       headers: {
         'Content-Type': 'application/json',
       },
