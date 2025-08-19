@@ -209,21 +209,26 @@ const triggerNextWorkflowStep = async (projectUniqueId: string, currentStepId: n
     if (aiResult.success) {
       console.log(`✅ Étape suivante "${nextStep[0].name}" déclenchée avec succès`);
       
-      // Sauvegarder la conversation si une URL est retournée
-      // Note: Pour l'instant, nous ne sauvegardons pas automatiquement les conversations
-      // car elles sont liées aux sessions et non directement aux projets
+      // Sauvegarder l'URL de conversation si disponible
       if (aiResult.conversationUrl) {
         console.log(`💾 URL de conversation disponible: ${aiResult.conversationUrl}`);
-        // TODO: Implémenter la sauvegarde dans une session appropriée
+        await db
+          .update(project_analysis_progress)
+          .set({
+            manusConversationUrl: aiResult.conversationUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_progress.id, nextWorkflowStep[0].id));
       }
     } else {
       console.error(`❌ Erreur lors du déclenchement de l'étape suivante: ${aiResult.error}`);
       
-      // Remettre l'étape en statut 'pending' en cas d'erreur
+      // Marquer l'étape comme échouée avec le message d'erreur
       await db
         .update(project_analysis_progress)
         .set({
-          status: 'pending',
+          status: 'failed',
+          content: `Erreur lors de l'envoi du prompt à l'API Python: ${aiResult.error}`,
           updatedAt: new Date(),
         })
         .where(eq(project_analysis_progress.id, nextWorkflowStep[0].id));
@@ -2115,16 +2120,27 @@ export const triggerStep1Analysis = async (req: Request, res: Response): Promise
         status: 'in_progress'
       });
     } else {
-      // Remettre l'étape en pending en cas d'erreur
+      // Marquer l'étape comme échouée avec le message d'erreur
       await db
         .update(project_analysis_progress)
         .set({
-          status: 'pending',
+          status: 'failed',
+          content: `Erreur lors de l'envoi du prompt à l'API Python: ${result.error}`,
           updatedAt: new Date(),
         })
         .where(eq(project_analysis_progress.id, workflowStep1[0].id));
 
-      throw new Error(result.error || 'Erreur lors de l\'envoi du prompt à l\'IA');
+      console.error(`❌ Étape 1 marquée comme échouée pour le projet: ${projectUniqueId}`);
+      console.error(`📄 Erreur: ${result.error}`);
+
+      res.status(200).json({
+        message: 'Étape 1 déclenchée mais échec de l\'API Python',
+        projectUniqueId,
+        stepId: step1[0].id,
+        stepName: step1[0].name,
+        status: 'failed',
+        error: result.error
+      });
     }
 
   } catch (error) {
