@@ -13,6 +13,7 @@ import {
   getVigilancePoints,
   updateVigilancePointStatus,
   getProjectStrengths,
+  updateStrengthStatus,
   getProjectConversations,
   createOrUpdateDraft,
   deleteProject,
@@ -111,6 +112,12 @@ router.patch('/:projectUniqueId/vigilance-points/:pointId', updateVigilancePoint
  * @description Récupère les points forts d'un projet
  */
 router.get('/:projectUniqueId/strengths', getProjectStrengths);
+
+/**
+ * @route PATCH /api/projects/:projectUniqueId/strengths/:pointId
+ * @description Met à jour le statut d'un point fort
+ */
+router.patch('/:projectUniqueId/strengths/:pointId', updateStrengthStatus);
 
 /**
  * @route GET /api/projects/:projectUniqueId/conversations

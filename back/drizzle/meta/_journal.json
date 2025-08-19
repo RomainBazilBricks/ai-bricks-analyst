@@ -106,6 +106,20 @@
       "when": 1755363360053,
       "tag": "0014_smiling_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1755400000000,
+      "tag": "0015_add_zip_url_to_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1755400060000,
+      "tag": "0016_add_conversation_fiche_to_projects",
+      "breakpoints": true
     }
   ]
 }

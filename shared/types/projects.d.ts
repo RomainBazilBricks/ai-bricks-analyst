@@ -16,6 +16,8 @@ export type Project = {
   startDate: Date;
   fundingExpectedDate: Date;
   zipUrl?: string; // URL du dernier ZIP généré pour ce projet
+  conversation?: string; // Historique des conversations avec le porteur de projet
+  fiche?: string; // Fiche de présentation du projet par le porteur
   createdAt: Date;
   updatedAt: Date;
   // Relations
@@ -63,6 +65,8 @@ export type CreateProjectInput = {
   startDate?: string; // Optionnel
   fundingExpectedDate?: string; // Optionnel
   fileUrls: string[];
+  conversation?: string; // Historique des conversations avec le porteur de projet
+  fiche?: string; // Fiche de présentation du projet par le porteur
 };
 
 export type PostSynthesisInput = {

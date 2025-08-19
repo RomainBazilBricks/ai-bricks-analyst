@@ -657,7 +657,7 @@ export const updateWorkflowStep = async (req: Request, res: Response): Promise<a
     let nextStepTriggered = false;
     if (stepData.status === 'completed') {
       try {
-        // Récupérer l'ordre de l'étape courante
+        // Récupérer l'ordre de l'étape courante pour déclencher la suivante
         const currentStep = await db
           .select()
           .from(analysis_steps)
@@ -797,18 +797,15 @@ export const receiveConsolidatedData = async (req: Request, res: Response): Prom
       .where(eq(project_analysis_progress.id, workflowStep[0].workflow.id))
       .returning();
 
-    // Déclencher automatiquement l'étape suivante (ordre 3 - Documents manquants)
-    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 2);
-    if (!triggerResult.success) {
-      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
-    }
+    // Note: Pas de déclenchement automatique de l'étape suivante
+    // C'est Manus qui gère l'ordre et le déclenchement des étapes
 
     res.status(200).json({
       success: true,
       message: 'Données consolidées reçues et enregistrées avec succès',
       workflowStepId: updatedStep[0].id,
       data: validatedData.consolidatedData,
-      nextStepTriggered: triggerResult.success
+      nextStepTriggered: false
     });
   } catch (error) {
     res.status(500).json({ 
@@ -1108,11 +1105,8 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
       })
       .where(eq(projects.id, project[0].id));
 
-    // Déclencher automatiquement l'étape suivante (ordre 2 - Consolidation des données)
-    const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 1);
-    if (!triggerResult.success) {
-      console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
-    }
+    // Note: Pas de déclenchement automatique de l'étape suivante
+    // C'est Manus qui gère l'ordre et le déclenchement des étapes
 
     res.status(200).json({
       success: true,
@@ -1650,7 +1644,14 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     // Créer le ZIP et l'uploader vers S3
     console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
-    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId);
+    
+    // Préparer les données du projet pour inclure conversation.txt et fiche.txt
+    const projectData = {
+      conversation: project[0].conversation || undefined,
+      fiche: project[0].fiche || undefined
+    };
+    
+    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId, projectData);
     console.log(`✅ ZIP créé avec succès:`, {
       fileName: zipResult.fileName,
       s3Url: zipResult.s3Url,
@@ -1790,11 +1791,9 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       })
       .where(eq(projects.id, project[0].id));
 
-    // Déclencher automatiquement l'étape suivante seulement si ce n'est pas un fallback d'erreur
-    let triggerResult = { success: false };
-    if (!isErrorFallback) {
-      triggerResult = await triggerNextWorkflowStep(projectUniqueId, 0);
-    }
+    // Note: Pas de déclenchement automatique de l'étape suivante
+    // C'est Manus qui déclenchera les étapes suivantes via les endpoints dédiés
+    let triggerResult = { success: true };
 
     console.log(`✅ ZIP traité pour le projet: ${projectUniqueId}`);
     console.log(`🔗 URL conversation: ${conversationUrl}`);
@@ -1912,7 +1911,14 @@ export const generateZipOnly = async (req: Request, res: Response): Promise<any>
 
     // Créer le ZIP et l'uploader vers S3
     console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
-    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId);
+    
+    // Préparer les données du projet pour inclure conversation.txt et fiche.txt
+    const projectData = {
+      conversation: project[0].conversation || undefined,
+      fiche: project[0].fiche || undefined
+    };
+    
+    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId, projectData);
     console.log(`✅ ZIP créé avec succès:`, {
       fileName: zipResult.fileName,
       s3Url: zipResult.s3Url,

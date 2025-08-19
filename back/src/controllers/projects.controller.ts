@@ -70,9 +70,35 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     let isNewProject = false;
 
     if (existingProject.length > 0) {
-      // Le projet existe déjà, on l'utilise
-      project = existingProject[0];
-      console.log(`📁 Projet existant trouvé: ${projectData.projectUniqueId}`);
+      // Le projet existe déjà, mettre à jour les champs conversation et fiche si fournis
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      
+      // Seulement ajouter conversation si elle est définie et non vide
+      if (projectData.conversation && projectData.conversation.trim() !== '') {
+        updateData.conversation = projectData.conversation.trim();
+      }
+      
+      // Seulement ajouter fiche si elle est définie et non vide
+      if (projectData.fiche && projectData.fiche.trim() !== '') {
+        updateData.fiche = projectData.fiche.trim();
+      }
+      
+      // Mettre à jour le projet existant si des champs valides sont fournis
+      if (updateData.conversation || updateData.fiche) {
+        const updatedProject = await db
+          .update(projects)
+          .set(updateData)
+          .where(eq(projects.projectUniqueId, projectData.projectUniqueId))
+          .returning();
+        
+        project = updatedProject[0];
+        console.log(`📝 Projet existant mis à jour: ${projectData.projectUniqueId} (conversation: ${updateData.conversation ? 'oui' : 'non'}, fiche: ${updateData.fiche ? 'oui' : 'non'})`);
+      } else {
+        project = existingProject[0];
+        console.log(`📁 Projet existant trouvé: ${projectData.projectUniqueId} (aucune mise à jour de conversation/fiche)`);
+      }
     } else {
       // Créer le nouveau projet
       const newProject = await db
@@ -85,6 +111,8 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
           estimatedRoi: (projectData.estimatedRoi || 0).toString(),
           startDate: new Date(projectData.startDate || new Date().toISOString()),
           fundingExpectedDate: new Date(projectData.fundingExpectedDate || new Date().toISOString()),
+          conversation: (projectData.conversation && projectData.conversation.trim() !== '') ? projectData.conversation.trim() : null,
+          fiche: (projectData.fiche && projectData.fiche.trim() !== '') ? projectData.fiche.trim() : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -919,11 +947,16 @@ export const getVigilancePoints = async (req: Request, res: Response): Promise<a
       });
     }
 
-    // Récupérer les points de vigilance
+    // Récupérer les points de vigilance (uniquement les weaknesses)
     const vigilancePoints = await db
       .select()
       .from(strengths_and_weaknesses)
-      .where(eq(strengths_and_weaknesses.projectId, project[0].id))
+      .where(
+        and(
+          eq(strengths_and_weaknesses.projectId, project[0].id),
+          eq(strengths_and_weaknesses.type, 'weakness')
+        )
+      )
       .orderBy(desc(strengths_and_weaknesses.createdAt));
 
     console.log(`📋 Points de vigilance récupérés pour le projet ${projectUniqueId}: ${vigilancePoints.length} points`);
@@ -1491,6 +1524,75 @@ export const getProjectStrengths = async (req: Request, res: Response): Promise<
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'GET_PROJECT_STRENGTHS_ERROR'
+    });
+  }
+};
+
+/**
+ * Met à jour le statut d'un point fort
+ * @route PATCH /api/projects/:projectUniqueId/strengths/:pointId
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} pointId - Identifiant du point fort
+ * @body {status: 'resolved' | 'irrelevant' | 'pending', whyStatus?: string}
+ * @returns {StrengthPoint} Point fort mis à jour
+ */
+export const updateStrengthStatus = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, pointId } = req.params;
+    const { status, whyStatus } = req.body;
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que le point fort existe et appartient au projet
+    const existingPoint = await db
+      .select()
+      .from(strengths_and_weaknesses)
+      .where(and(
+        eq(strengths_and_weaknesses.id, pointId),
+        eq(strengths_and_weaknesses.projectId, project[0].id),
+        eq(strengths_and_weaknesses.type, 'strength')
+      ))
+      .limit(1);
+
+    if (existingPoint.length === 0) {
+      return res.status(404).json({
+        error: 'Strength point not found',
+        code: 'STRENGTH_POINT_NOT_FOUND'
+      });
+    }
+
+    // Mettre à jour le statut
+    const updatedPoint = await db
+      .update(strengths_and_weaknesses)
+      .set({
+        status: status as 'resolved' | 'irrelevant' | 'pending',
+        whyStatus: whyStatus || null,
+        updatedAt: new Date()
+      })
+      .where(eq(strengths_and_weaknesses.id, pointId))
+      .returning();
+
+    console.log(`📋 Point fort ${pointId} mis à jour: ${status}`);
+
+    res.json(updatedPoint[0]);
+    
+  } catch (error) {
+    console.error('Error updating strength status:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'UPDATE_STRENGTH_STATUS_ERROR'
     });
   }
 }; 

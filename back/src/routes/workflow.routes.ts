@@ -196,22 +196,24 @@ router.post('/final-message/:projectUniqueId', receiveFinalMessage);
 router.get('/test-prompt/:projectUniqueId', testPromptProcessing);
 
 /**
- * Endpoint pour l'étape 0: Génère un ZIP des documents et l'envoie à Manus
- * @route POST /api/workflow/generate-zip-from-documents
- * @param {object} body - Données contenant le projectUniqueId
- * @returns {Object} Détails du ZIP créé et URL de conversation Manus
- * @access Public (pour déclencher l'étape 0)
- */
-router.post('/generate-zip-from-documents', uploadZipFromUrl);
-
-/**
- * Endpoint pour générer uniquement un ZIP des documents (sans déclencher l'IA)
- * @route POST /api/workflow/generate-zip-only
+ * Endpoint pour générer uniquement un ZIP des documents (SANS déclencher l'IA)
+ * @route POST /api/workflow/generate-zip
  * @param {object} body - Données contenant le projectUniqueId
  * @returns {Object} Détails du ZIP créé
  * @access Public (pour régénérer le ZIP)
  */
-router.post('/generate-zip-only', generateZipOnly);
+router.post('/generate-zip', generateZipOnly);
+
+/**
+ * Endpoint pour l'étape 0: Génère un ZIP des documents ET l'envoie à Manus (déclenche l'IA)
+ * @route POST /api/workflow/upload-zip-and-trigger-ai
+ * @param {object} body - Données contenant le projectUniqueId
+ * @returns {Object} Détails du ZIP créé et URL de conversation Manus
+ * @access Public (pour déclencher l'étape 0)
+ */
+router.post('/upload-zip-and-trigger-ai', uploadZipFromUrl);
+
+
 
 /**
  * Endpoint pour déclencher manuellement l'étape 1: Analyse globale

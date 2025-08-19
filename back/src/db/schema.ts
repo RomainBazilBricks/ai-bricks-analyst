@@ -82,6 +82,8 @@ export const projects = pgTable('projects', {
   startDate: timestamp('start_date').notNull(), // Start date
   fundingExpectedDate: timestamp('funding_expected_date').notNull(), // Date funding is needed
   zipUrl: text('zip_url'), // URL du dernier ZIP généré pour ce projet
+  conversation: text('conversation'), // Historique des conversations avec le porteur de projet
+  fiche: text('fiche'), // Fiche de présentation du projet par le porteur
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -285,6 +287,8 @@ export const CreateProjectSchema = z.object({
   startDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
   fundingExpectedDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
   fileUrls: z.array(z.string().url('Must be valid URLs')).min(1, 'At least one file URL is required'),
+  conversation: z.string().optional(), // Historique des conversations avec le porteur de projet
+  fiche: z.string().optional(), // Fiche de présentation du projet par le porteur
 });
 
 // Schema for POST /sessions

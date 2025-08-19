@@ -137,7 +137,7 @@ export const useTriggerStep0 = (options = {}) =>
     documentCount: number; 
     conversationUrl: string; 
     nextStepTriggered: boolean; 
-  }>("/workflow/generate-zip-from-documents", options);
+  }>("/workflow/upload-zip-and-trigger-ai", options);
 
 /**
  * Hook pour générer uniquement un ZIP des documents (sans déclencher l'IA)
@@ -150,4 +150,4 @@ export const useGenerateZipOnly = (options = {}) =>
     zipFileName: string; 
     zipSize: number; 
     documentCount: number; 
-  }>("/workflow/generate-zip-only", options); 
+  }>("/workflow/generate-zip", options); 

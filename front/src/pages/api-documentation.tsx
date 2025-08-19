@@ -176,8 +176,8 @@ const manusEndpoints = [
   },
   {
     method: 'POST' as const,
-    path: '/workflow/step-4-message',
-    description: 'Endpoint ManusAI - Mise à jour Étape 4 (Message de synthèse)',
+    path: '/workflow/step-5-message',
+    description: 'Endpoint ManusAI - Mise à jour Étape 5 (Message de synthèse)',
     auth: false,
     requestBody: {
       projectUniqueId: "ab12",
@@ -311,9 +311,21 @@ export const ApiDocumentationPage = () => {
                   4
                 </div>
                 <div>
-                  <h4 className="font-semibold">Étape 4 - Message de synthèse</h4>
+                  <h4 className="font-semibold">Étape 4 - Points de vigilance</h4>
                   <p className="text-sm text-gray-600">
-                    Message final récapitulatif via <code>/workflow/step-4-message</code>
+                    Analyse des points de vigilance via <code>/workflow/step-4-vigilance</code>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-semibold">
+                  5
+                </div>
+                <div>
+                  <h4 className="font-semibold">Étape 5 - Message de synthèse</h4>
+                  <p className="text-sm text-gray-600">
+                    Message final récapitulatif via <code>/workflow/step-5-message</code>
                   </p>
                 </div>
               </div>

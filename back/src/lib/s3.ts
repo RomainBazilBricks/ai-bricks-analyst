@@ -227,7 +227,8 @@ async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
  */
 export async function createZipFromDocuments(
   documents: Array<{ fileName: string; url: string }>,
-  projectUniqueId: string
+  projectUniqueId: string,
+  projectData?: { conversation?: string; fiche?: string }
 ): Promise<{ s3Url: string; fileName: string; hash: string; size: number }> {
   try {
     console.log(`📦 Création d'un ZIP pour le projet ${projectUniqueId} avec ${documents.length} documents`);
@@ -291,6 +292,39 @@ export async function createZipFromDocuments(
   if (failedDocuments.length > 0) {
     console.log(`   📋 Documents échoués: ${failedDocuments.join(', ')}`);
   }
+
+    // Ajouter les fichiers conversation.txt et fiche.txt si les données sont disponibles et non vides
+    if (projectData?.conversation && projectData.conversation.trim() !== '') {
+      try {
+        const conversationIntro = "Voici un aperçu de la conversation entre les membres de l'équipe Bricks et le porteur de projet";
+        const conversationContent = `${conversationIntro}\n\n${projectData.conversation.trim()}`;
+        const conversationBuffer = Buffer.from(conversationContent, 'utf-8');
+        
+        archive.append(conversationBuffer, { name: 'conversation.txt' });
+        console.log(`✅ Fichier conversation.txt ajouté au ZIP (${conversationBuffer.length} bytes)`);
+      } catch (error) {
+        console.warn(`❌ Impossible d'ajouter conversation.txt:`, error);
+        // L'erreur ne bloque pas le processus, on continue
+      }
+    } else {
+      console.log(`ℹ️ Aucune conversation valide disponible pour ce projet`);
+    }
+
+    if (projectData?.fiche && projectData.fiche.trim() !== '') {
+      try {
+        const ficheIntro = "Voici ce qu'à indiqué le porteur de projet dans sa rédaction en autonomie de la fiche opportunité pour présenter le projet aux investisseurs";
+        const ficheContent = `${ficheIntro}\n\n${projectData.fiche.trim()}`;
+        const ficheBuffer = Buffer.from(ficheContent, 'utf-8');
+        
+        archive.append(ficheBuffer, { name: 'fiche.txt' });
+        console.log(`✅ Fichier fiche.txt ajouté au ZIP (${ficheBuffer.length} bytes)`);
+      } catch (error) {
+        console.warn(`❌ Impossible d'ajouter fiche.txt:`, error);
+        // L'erreur ne bloque pas le processus, on continue
+      }
+    } else {
+      console.log(`ℹ️ Aucune fiche valide disponible pour ce projet`);
+    }
 
     // Finaliser l'archive
     archive.finalize();
