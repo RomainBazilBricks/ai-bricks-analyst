@@ -1604,7 +1604,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       });
     }
 
-    console.log(`✅ Projet trouvé: ${project[0].name} (ID: ${project[0].id})`);
+    console.log(`✅ Projet trouvé: ${project[0].projectName} (ID: ${project[0].id})`);
 
     // Récupérer tous les documents du projet via les sessions
     console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
@@ -1767,7 +1767,8 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     }
 
   } catch (error: any) {
-    console.error(`❌ Erreur lors de l'upload ZIP pour le projet ${projectUniqueId}:`);
+    const { projectUniqueId } = req.body;
+    console.error(`❌ Erreur lors de l'upload ZIP pour le projet ${projectUniqueId || 'INCONNU'}:`);
     console.error(`📄 Type d'erreur:`, error.constructor.name);
     console.error(`📄 Message d'erreur:`, error.message);
     

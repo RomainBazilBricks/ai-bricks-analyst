@@ -96,7 +96,16 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
 
   // Fonction pour déclencher l'étape 0 (Upload ZIP)
   const handleTriggerStep0 = async (step: any) => {
-    if (!projectUniqueId) return;
+    console.log('🚀🚀🚀 DEBUT handleTriggerStep0 - Étape 0 appelée !', {
+      projectUniqueId,
+      step,
+      stepId: step.step?.id || step.id
+    });
+    
+    if (!projectUniqueId) {
+      console.log('❌ Pas de projectUniqueId, abandon');
+      return;
+    }
     
     const stepId = step.step?.id || step.id;
     
@@ -111,8 +120,11 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
     
     try {
       console.log('🚀 Déclenchement de l\'étape 0 (Upload ZIP) pour le projet:', projectUniqueId);
+      console.log('📡 Appel de triggerStep0 avec payload:', { projectUniqueId });
       
       const response = await triggerStep0({ projectUniqueId });
+      
+      console.log('📦 Réponse de triggerStep0:', response);
       
       // Stocker le résultat
       setPromptResults(prev => {
@@ -494,9 +506,18 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
                               title={((step as any).step?.order || (step as any).order) === 0 ? "Déclencher l'upload ZIP" : "Envoyer à l'IA"}
                               onClick={() => {
                                 const stepOrder = (step as any).step?.order || (step as any).order;
+                                console.log('🎯 DEBUG: Clic sur bouton Play:', {
+                                  stepOrder,
+                                  stepName: (step as any).step?.name || (step as any).name,
+                                  stepId: (step as any).step?.id || (step as any).id,
+                                  fullStep: step
+                                });
+                                
                                 if (stepOrder === 0) {
+                                  console.log('✅ Déclenchement handleTriggerStep0');
                                   handleTriggerStep0(step);
                                 } else {
+                                  console.log('✅ Déclenchement handleSendPromptToAI');
                                   handleSendPromptToAI(step);
                                 }
                               }}
@@ -613,9 +634,17 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
               <Button 
                 onClick={() => {
                   const stepOrder = selectedPrompt.step.step?.order || selectedPrompt.step.order;
+                  console.log('🎯 DEBUG: Clic sur bouton Modal "Envoyer à l\'IA":', {
+                    stepOrder,
+                    stepName: selectedPrompt.step.step?.name || selectedPrompt.step.name,
+                    stepId: selectedPrompt.step.step?.id || selectedPrompt.step.id
+                  });
+                  
                   if (stepOrder === 0) {
+                    console.log('✅ Modal: Déclenchement handleTriggerStep0');
                     handleTriggerStep0(selectedPrompt.step);
                   } else {
+                    console.log('✅ Modal: Déclenchement handleSendPromptToAI');
                     handleSendPromptToAI(selectedPrompt.step);
                   }
                   setSelectedPrompt(null);
