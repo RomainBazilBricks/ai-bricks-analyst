@@ -1746,32 +1746,60 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       console.error(`📊 Status:`, axiosError.response?.status);
       console.error(`📄 Response data:`, axiosError.response?.data);
       
-      // Pour l'instant, on continue même si l'API Python échoue
-      // TODO: Gérer proprement cette erreur
-      console.log(`⚠️ Continuons malgré l'erreur de l'API Python...`);
-      
-      // Simuler une réponse pour que le workflow continue
-      response = {
-        data: {
-          conversation_url: 'https://error-fallback-url.com',
-          status: 'error_but_continuing'
-        }
-      };
+      // Marquer l'étape 0 comme échouée
+      await db
+        .update(project_analysis_progress)
+        .set({
+          status: 'failed',
+          content: `Erreur lors de l'envoi du ZIP à l'API Python: ${axiosError.message}`,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(project_analysis_progress.projectId, project[0].id),
+          eq(project_analysis_progress.stepId, step0[0].id)
+        ));
+
+      return res.status(500).json({
+        error: 'Échec de l\'envoi du ZIP à l\'API Python',
+        details: axiosError.message,
+        code: 'PYTHON_API_ERROR'
+      });
     }
 
     console.log(`📨 Réponse reçue de l'API Python:`, response.status, response.statusText);
     console.log(`📄 Corps de la réponse:`, JSON.stringify(response.data, null, 2));
 
-    // Gérer les réponses normales et les fallbacks
-    const conversationUrl = response.data?.conversation_url || 'https://fallback-conversation-url.com';
-    const isErrorFallback = response.data?.status === 'error_but_continuing';
+    // Vérifier que l'API Python a retourné une URL de conversation valide
+    const conversationUrl = response.data?.conversation_url;
+    if (!conversationUrl || typeof conversationUrl !== 'string' || conversationUrl.trim() === '') {
+      console.error(`❌ L'API Python n'a pas retourné d'URL de conversation valide:`, conversationUrl);
+      
+      // Marquer l'étape 0 comme échouée
+      await db
+        .update(project_analysis_progress)
+        .set({
+          status: 'failed',
+          content: `L'API Python n'a pas retourné d'URL de conversation valide`,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(project_analysis_progress.projectId, project[0].id),
+          eq(project_analysis_progress.stepId, step0[0].id)
+        ));
+
+      return res.status(500).json({
+        error: 'L\'API Python n\'a pas retourné d\'URL de conversation valide',
+        details: 'conversation_url manquante ou invalide dans la réponse',
+        code: 'INVALID_CONVERSATION_URL'
+      });
+    }
 
     // Mettre à jour l'étape 0 comme terminée
     await db
       .update(project_analysis_progress)
       .set({
         status: 'completed',
-        content: `ZIP uploadé: ${zipResult.fileName} (${zipResult.size} bytes)${isErrorFallback ? ' - Fallback après erreur API Python' : ''}`,
+        content: `ZIP uploadé: ${zipResult.fileName} (${zipResult.size} bytes)`,
         manusConversationUrl: conversationUrl,
         completedAt: new Date(),
         updatedAt: new Date(),
@@ -1797,20 +1825,16 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     console.log(`✅ ZIP traité pour le projet: ${projectUniqueId}`);
     console.log(`🔗 URL conversation: ${conversationUrl}`);
-    if (isErrorFallback) {
-      console.log(`⚠️ Mode fallback activé suite à erreur API Python`);
-    }
 
     res.status(200).json({
-      message: isErrorFallback ? 'ZIP créé mais erreur lors de l\'envoi à Manus (mode fallback)' : 'ZIP créé et envoyé avec succès à Manus',
+      message: 'ZIP créé et envoyé avec succès à Manus',
       projectUniqueId,
       zipUrl: zipResult.s3Url,
       zipFileName: zipResult.fileName,
       zipSize: zipResult.size,
       documentCount: projectDocuments.length,
       conversationUrl,
-      nextStepTriggered: triggerResult.success,
-      isErrorFallback
+      nextStepTriggered: triggerResult.success
     });
 
   } catch (error: any) {
