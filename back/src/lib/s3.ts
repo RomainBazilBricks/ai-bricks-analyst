@@ -4,6 +4,8 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import archiver from 'archiver';
 import { Readable } from 'stream';
+import yauzl from 'yauzl';
+import { promisify } from 'util';
 
 dotenv.config();
 
@@ -20,6 +22,7 @@ const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME!;
 
 /**
  * Télécharge un fichier depuis une URL et l'upload vers S3
+ * Si c'est un fichier ZIP, le dézippe et upload les fichiers individuels
  */
 export async function uploadFileFromUrl(
   fileUrl: string,
@@ -31,6 +34,7 @@ export async function uploadFileFromUrl(
   hash: string;
   mimeType: string;
   size: number;
+  extractedFiles?: Array<{ s3Url: string; fileName: string; hash: string; mimeType: string; size: number }>;
 }> {
   try {
     // Télécharger le fichier depuis l'URL
@@ -57,7 +61,68 @@ export async function uploadFileFromUrl(
     // Calculer le hash du fichier pour détecter les doublons
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     
-    // Créer la clé S3 avec le projectUniqueId
+    // Vérifier si c'est un fichier ZIP
+    const isZipFile = contentType === 'application/zip' || 
+                     finalFileName.toLowerCase().endsWith('.zip') ||
+                     contentType === 'application/x-zip-compressed';
+    
+    if (isZipFile) {
+      console.log(`📦 Fichier ZIP détecté: ${finalFileName}, début du dézippage...`);
+      
+      try {
+        // Dézipper le fichier et extraire les fichiers (en filtrant les images)
+        const extractedFiles = await unzipFile(buffer, projectUniqueId);
+        
+        if (extractedFiles.length === 0) {
+          console.log(`⚠️ Aucun fichier valide trouvé dans le ZIP ${finalFileName}`);
+          // Traiter comme un fichier normal si aucun fichier extrait
+        } else {
+          // Upload les fichiers extraits vers S3
+          const uploadResults = await uploadExtractedFilesToS3(extractedFiles, projectUniqueId);
+          
+          console.log(`✅ ZIP traité: ${uploadResults.length} fichiers extraits et uploadés`);
+          
+          // Créer la clé S3 pour le ZIP original (optionnel, pour garder une trace)
+          const s3Key = `projects/${projectUniqueId}/zips/${hash}-${finalFileName}`;
+          
+          // Upload le ZIP original vers S3 pour référence
+          const putCommand = new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: s3Key,
+            Body: buffer,
+            ContentType: contentType,
+            ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+            Metadata: {
+              originalUrl: fileUrl,
+              projectUniqueId,
+              isZipFile: 'true',
+              extractedFilesCount: extractedFiles.length.toString(),
+              uploadedAt: new Date().toISOString(),
+            },
+          });
+
+          await s3Client.send(putCommand);
+          
+          // Générer l'URL S3 du ZIP original
+          const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_S3_REGION || 'eu-north-1'}.amazonaws.com/${s3Key}`;
+          
+          return {
+            s3Url,
+            fileName: finalFileName,
+            hash,
+            mimeType: contentType,
+            size: buffer.length,
+            extractedFiles: uploadResults,
+          };
+        }
+      } catch (zipError) {
+        console.error(`❌ Erreur lors du traitement du ZIP ${finalFileName}:`, zipError);
+        console.log(`📄 Traitement comme fichier normal...`);
+        // Continuer avec le traitement normal si le dézippage échoue
+      }
+    }
+    
+    // Traitement normal pour les fichiers non-ZIP ou en cas d'erreur de dézippage
     const s3Key = `projects/${projectUniqueId}/${hash}-${finalFileName}`;
     
     // Upload vers S3
@@ -66,6 +131,7 @@ export async function uploadFileFromUrl(
       Key: s3Key,
       Body: buffer,
       ContentType: contentType,
+      ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
       Metadata: {
         originalUrl: fileUrl,
         projectUniqueId,
@@ -101,6 +167,19 @@ export async function generatePresignedUrl(s3Key: string, expiresIn = 3600): Pro
   });
 
   return await getSignedUrl(s3Client, command, { expiresIn });
+}
+
+/**
+ * Génère une URL pré-signée depuis une URL S3 complète
+ */
+export async function generatePresignedUrlFromS3Url(s3Url: string, expiresIn = 3600): Promise<string> {
+  try {
+    const s3Key = extractS3KeyFromUrl(s3Url);
+    return await generatePresignedUrl(s3Key, expiresIn);
+  } catch (error) {
+    console.error('Erreur lors de la génération de l\'URL pré-signée:', error);
+    throw new Error(`Failed to generate presigned URL: ${(error as Error).message}`);
+  }
 }
 
 /**
@@ -192,6 +271,22 @@ export function extractS3KeyFromUrl(s3Url: string): string {
 }
 
 /**
+ * Extrait la clé S3 depuis une URL S3 complète sans décoder (pour les clés stockées encodées)
+ */
+export function extractS3KeyFromUrlRaw(s3Url: string): string {
+  try {
+    const url = new URL(s3Url);
+    const key = url.pathname.substring(1); // Enlever le "/" initial, sans décoder
+    
+    console.log(`🔑 S3 Key brut: ${key}`);
+    
+    return key;
+  } catch {
+    throw new Error('Invalid S3 URL format');
+  }
+}
+
+/**
  * Télécharge un fichier depuis S3
  */
 async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
@@ -232,6 +327,9 @@ export async function createZipFromDocuments(
 ): Promise<{ s3Url: string; fileName: string; hash: string; size: number }> {
   try {
     console.log(`📦 Création d'un ZIP pour le projet ${projectUniqueId} avec ${documents.length} documents`);
+    
+    // Filtrer les images avant de créer le ZIP
+    const filteredDocuments = filterNonImageDocuments(documents);
 
     // Créer l'archive ZIP en mémoire
     const archive = archiver('zip', {
@@ -265,7 +363,7 @@ export async function createZipFromDocuments(
   const failedDocuments: string[] = [];
 
   // Ajouter chaque document au ZIP
-  for (const doc of documents) {
+  for (const doc of filteredDocuments) {
     try {
       console.log(`📄 Tentative d'ajout du document: ${doc.fileName}`);
       console.log(`🔗 URL S3: ${doc.url}`);
@@ -277,7 +375,7 @@ export async function createZipFromDocuments(
       archive.append(fileBuffer, { name: cleanFileName });
       
       successCount++;
-      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${successCount}/${documents.length})`);
+      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${successCount}/${filteredDocuments.length})`);
     } catch (error) {
       failureCount++;
       failedDocuments.push(doc.fileName);
@@ -287,8 +385,8 @@ export async function createZipFromDocuments(
   }
 
   console.log(`📊 Résumé de l'ajout des documents:`);
-  console.log(`   ✅ Succès: ${successCount}/${documents.length}`);
-  console.log(`   ❌ Échecs: ${failureCount}/${documents.length}`);
+  console.log(`   ✅ Succès: ${successCount}/${filteredDocuments.length}`);
+  console.log(`   ❌ Échecs: ${failureCount}/${filteredDocuments.length}`);
   if (failedDocuments.length > 0) {
     console.log(`   📋 Documents échoués: ${failedDocuments.join(', ')}`);
   }
@@ -345,9 +443,12 @@ export async function createZipFromDocuments(
       Key: s3Key,
       Body: zipBuffer,
       ContentType: 'application/zip',
+      ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
       Metadata: {
         projectUniqueId,
-        documentCount: documents.length.toString(),
+        documentCount: filteredDocuments.length.toString(),
+        originalDocumentCount: documents.length.toString(),
+        imagesFiltered: (documents.length - filteredDocuments.length).toString(),
         createdAt: new Date().toISOString(),
       },
     });
@@ -369,4 +470,237 @@ export async function createZipFromDocuments(
     console.error('❌ Erreur lors de la création du ZIP:', error);
     throw new Error(`Failed to create ZIP: ${(error as Error).message}`);
   }
+}
+
+/**
+ * Extensions d'images à filtrer lors de la création du ZIP
+ */
+const IMAGE_EXTENSIONS = [
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.heic', '.tiff', '.tif', '.svg', '.ico'
+];
+
+/**
+ * Vérifie si un fichier est une image basé sur son extension
+ */
+function isImageFile(fileName: string): boolean {
+  const extension = fileName.toLowerCase().split('.').pop();
+  return extension ? IMAGE_EXTENSIONS.includes(`.${extension}`) : false;
+}
+
+/**
+ * Filtre les documents pour exclure les images
+ */
+export function filterNonImageDocuments(documents: Array<{ fileName: string; url: string }>): Array<{ fileName: string; url: string }> {
+  const filteredDocuments = documents.filter(doc => !isImageFile(doc.fileName));
+  
+  const originalCount = documents.length;
+  const filteredCount = filteredDocuments.length;
+  const imageCount = originalCount - filteredCount;
+  
+  console.log(`🖼️ Filtrage des images: ${originalCount} documents → ${filteredCount} documents (${imageCount} images exclues)`);
+  
+  if (imageCount > 0) {
+    const imageFiles = documents.filter(doc => isImageFile(doc.fileName)).map(doc => doc.fileName);
+    console.log(`📋 Images exclues: ${imageFiles.join(', ')}`);
+  }
+  
+  return filteredDocuments;
+}
+
+/**
+ * Dézippe un fichier ZIP et retourne la liste des fichiers extraits
+ */
+export async function unzipFile(
+  zipBuffer: Buffer,
+  projectUniqueId: string
+): Promise<Array<{ fileName: string; buffer: Buffer; mimeType: string }>> {
+  return new Promise((resolve, reject) => {
+    const extractedFiles: Array<{ fileName: string; buffer: Buffer; mimeType: string }> = [];
+    
+    yauzl.fromBuffer(zipBuffer, { lazyEntries: true }, (err, zipfile) => {
+      if (err) {
+        console.error('❌ Erreur lors de l\'ouverture du ZIP:', err);
+        return reject(err);
+      }
+      
+      if (!zipfile) {
+        return reject(new Error('Impossible d\'ouvrir le fichier ZIP'));
+      }
+      
+      console.log(`📦 Début du dézippage: ${zipfile.entryCount} entrées trouvées`);
+      
+      zipfile.readEntry();
+      
+      zipfile.on('entry', (entry) => {
+        // Ignorer les dossiers
+        if (entry.fileName.endsWith('/')) {
+          console.log(`📁 Dossier ignoré: ${entry.fileName}`);
+          zipfile.readEntry();
+          return;
+        }
+        
+        // Ignorer les fichiers système et cachés
+        const fileName = entry.fileName.split('/').pop() || '';
+        if (fileName.startsWith('.') || fileName.startsWith('__MACOSX')) {
+          console.log(`🚫 Fichier système ignoré: ${entry.fileName}`);
+          zipfile.readEntry();
+          return;
+        }
+        
+        // Ignorer les images
+        if (isImageFile(fileName)) {
+          console.log(`🖼️ Image ignorée: ${entry.fileName}`);
+          zipfile.readEntry();
+          return;
+        }
+        
+        console.log(`📄 Extraction du fichier: ${entry.fileName} (${entry.uncompressedSize} bytes)`);
+        
+        zipfile.openReadStream(entry, (err, readStream) => {
+          if (err) {
+            console.error(`❌ Erreur lors de l'ouverture du stream pour ${entry.fileName}:`, err);
+            zipfile.readEntry();
+            return;
+          }
+          
+          if (!readStream) {
+            console.error(`❌ Stream vide pour ${entry.fileName}`);
+            zipfile.readEntry();
+            return;
+          }
+          
+          const chunks: Buffer[] = [];
+          
+          readStream.on('data', (chunk) => {
+            chunks.push(chunk);
+          });
+          
+          readStream.on('end', () => {
+            const fileBuffer = Buffer.concat(chunks);
+            
+            // Déterminer le type MIME basé sur l'extension
+            let mimeType = 'application/octet-stream';
+            const extension = fileName.toLowerCase().split('.').pop();
+            
+            switch (extension) {
+              case 'pdf':
+                mimeType = 'application/pdf';
+                break;
+              case 'doc':
+                mimeType = 'application/msword';
+                break;
+              case 'docx':
+                mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                break;
+              case 'xls':
+                mimeType = 'application/vnd.ms-excel';
+                break;
+              case 'xlsx':
+                mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                break;
+              case 'ppt':
+                mimeType = 'application/vnd.ms-powerpoint';
+                break;
+              case 'pptx':
+                mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                break;
+              case 'txt':
+                mimeType = 'text/plain';
+                break;
+              case 'csv':
+                mimeType = 'text/csv';
+                break;
+            }
+            
+            extractedFiles.push({
+              fileName: fileName,
+              buffer: fileBuffer,
+              mimeType: mimeType
+            });
+            
+            console.log(`✅ Fichier extrait: ${fileName} (${fileBuffer.length} bytes, ${mimeType})`);
+            zipfile.readEntry();
+          });
+          
+          readStream.on('error', (err) => {
+            console.error(`❌ Erreur lors de la lecture du stream pour ${entry.fileName}:`, err);
+            zipfile.readEntry();
+          });
+        });
+      });
+      
+      zipfile.on('end', () => {
+        console.log(`✅ Dézippage terminé: ${extractedFiles.length} fichiers extraits`);
+        resolve(extractedFiles);
+      });
+      
+      zipfile.on('error', (err) => {
+        console.error('❌ Erreur lors du dézippage:', err);
+        reject(err);
+      });
+    });
+  });
+}
+
+/**
+ * Upload les fichiers extraits d'un ZIP vers S3
+ */
+export async function uploadExtractedFilesToS3(
+  extractedFiles: Array<{ fileName: string; buffer: Buffer; mimeType: string }>,
+  projectUniqueId: string
+): Promise<Array<{ s3Url: string; fileName: string; hash: string; mimeType: string; size: number }>> {
+  const uploadResults: Array<{ s3Url: string; fileName: string; hash: string; mimeType: string; size: number }> = [];
+  
+  console.log(`📤 Upload de ${extractedFiles.length} fichiers extraits vers S3...`);
+  
+  for (const file of extractedFiles) {
+    try {
+      // Calculer le hash du fichier
+      const hash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+      
+      // Nettoyer le nom de fichier
+      const cleanFileName = file.fileName.replace(/[<>:"/\\|?*]/g, '_');
+      
+      // Créer la clé S3
+      const s3Key = `projects/${projectUniqueId}/${hash}-${cleanFileName}`;
+      
+      // Upload vers S3
+      const putCommand = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key,
+        Body: file.buffer,
+        ContentType: file.mimeType,
+        ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+        Metadata: {
+          projectUniqueId,
+          originalFileName: file.fileName,
+          extractedFromZip: 'true',
+          uploadedAt: new Date().toISOString(),
+        },
+      });
+      
+      await s3Client.send(putCommand);
+      
+      // Générer l'URL S3
+      const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_S3_REGION || 'eu-north-1'}.amazonaws.com/${s3Key}`;
+      
+      uploadResults.push({
+        s3Url,
+        fileName: cleanFileName,
+        hash,
+        mimeType: file.mimeType,
+        size: file.buffer.length,
+      });
+      
+      console.log(`✅ Fichier uploadé: ${cleanFileName} → ${s3Url}`);
+      
+    } catch (error) {
+      console.error(`❌ Erreur lors de l'upload de ${file.fileName}:`, error);
+      // Continuer avec les autres fichiers même si un échoue
+    }
+  }
+  
+  console.log(`📊 Upload terminé: ${uploadResults.length}/${extractedFiles.length} fichiers uploadés avec succès`);
+  
+  return uploadResults;
 } 

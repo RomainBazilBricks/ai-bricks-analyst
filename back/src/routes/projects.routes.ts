@@ -6,6 +6,7 @@ import {
   getProjectDocuments,
   getProjectDocumentUrls,
   getProjectDocumentsListPage,
+  getDocumentUrl,
   downloadDocument,
   getConsolidatedData,
   getMissingDocuments,
@@ -70,6 +71,13 @@ router.get('/:projectUniqueId/document-urls', getProjectDocumentUrls);
  * @returns {string} Page HTML avec la liste des documents
  */
 router.get('/:projectUniqueId/documents-list', getProjectDocumentsListPage);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/documents/:documentId/url
+ * @description Génère une URL pré-signée pour accéder à un document
+ * @query expiresIn?: number (durée d'expiration en secondes, défaut: 3600)
+ */
+router.get('/:projectUniqueId/documents/:documentId/url', getDocumentUrl);
 
 /**
  * @route GET /api/projects/:projectUniqueId/documents/:documentId/download

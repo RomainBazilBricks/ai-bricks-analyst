@@ -128,19 +128,29 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
     }
   });
 
-  const handleOpenDocument = (url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleOpenDocument = (documentId: string) => {
+    // Utiliser l'endpoint serveur pour affichage (sans paramètre download)
+    // Détection automatique de l'environnement
+    const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
+    const baseUrl = isProduction ? "" : "http://localhost:3001";
+    const viewUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents/${documentId}/download`;
+    window.open(viewUrl, '_blank', 'noopener,noreferrer');
   };
 
-  const handleDownloadDocument = (url: string, fileName: string) => {
-    // Créer un lien temporaire pour télécharger le fichier
-    const link = document.createElement('a');
-    link.href = url;
+  const handleDownloadDocument = (documentId: string, fileName: string) => {
+    // Utiliser l'endpoint serveur pour téléchargement (avec paramètre download=true)
+    // Détection automatique de l'environnement
+    const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
+    const baseUrl = isProduction ? "" : "http://localhost:3001";
+    const downloadUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents/${documentId}/download?download=true`;
+    
+    const link = window.document.createElement('a');
+    link.href = downloadUrl;
     link.download = fileName;
     link.target = '_blank';
-    document.body.appendChild(link);
+    window.document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    window.document.body.removeChild(link);
   };
 
   const toggleDocumentDetails = (documentId: string) => {
@@ -330,7 +340,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleOpenDocument(project.zipUrl!)}
+                      onClick={() => window.open(project.zipUrl!, '_blank', 'noopener,noreferrer')}
                       className="flex items-center gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
                     >
                       <ExternalLink className="h-3 w-3" />
@@ -339,7 +349,15 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDownloadDocument(project.zipUrl!, `${project.projectName}-documents.zip`)}
+                      onClick={() => {
+                        const link = window.document.createElement('a');
+                        link.href = project.zipUrl!;
+                        link.download = `${project.projectName}-documents.zip`;
+                        link.target = '_blank';
+                        window.document.body.appendChild(link);
+                        link.click();
+                        window.document.body.removeChild(link);
+                      }}
                       className="flex items-center gap-1 border-blue-300 text-blue-700 hover:bg-blue-100"
                     >
                       <Download className="h-3 w-3" />
@@ -472,7 +490,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleOpenDocument(document.url)}
+                    onClick={() => handleOpenDocument(document.id)}
                     className="flex items-center gap-1"
                   >
                     <ExternalLink className="h-3 w-3" />
@@ -481,7 +499,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDownloadDocument(document.url, document.fileName)}
+                    onClick={() => handleDownloadDocument(document.id, document.fileName)}
                     className="flex items-center gap-1"
                   >
                     <Download className="h-3 w-3" />

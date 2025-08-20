@@ -16,7 +16,7 @@ import {
   consolidated_data
 } from '@/db/schema';
 import { initiateWorkflowForProject, uploadZipFromUrl } from '@/controllers/workflow.controller';
-import { uploadFileFromUrl, s3Client } from '@/lib/s3';
+import { uploadFileFromUrl, s3Client, extractS3KeyFromUrl, extractS3KeyFromUrlRaw, generatePresignedUrlFromS3Url } from '@/lib/s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
   CreateProjectInput, 
@@ -176,27 +176,69 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
             // Ne pas passer de nom de fichier pour laisser la fonction extraire le nom original
           );
           
-          // Vérifier si ce document existe déjà (par nom de fichier)
-          if (existingFileNames.has(s3Result.fileName)) {
-            console.log(`⚠️ Document ${index + 1} ignoré (déjà existant): ${s3Result.fileName}`);
-            continue;
+          // Si c'est un ZIP avec des fichiers extraits, traiter chaque fichier extrait
+          if (s3Result.extractedFiles && s3Result.extractedFiles.length > 0) {
+            console.log(`📦 ZIP détecté avec ${s3Result.extractedFiles.length} fichiers extraits`);
+            
+            // Ajouter le ZIP original comme document de référence
+            if (!existingFileNames.has(s3Result.fileName)) {
+              documentsToInsert.push({
+                sessionId: newSession[0].id,
+                fileName: s3Result.fileName,
+                url: s3Result.s3Url,
+                hash: s3Result.hash,
+                mimeType: s3Result.mimeType,
+                size: s3Result.size,
+                status: 'PROCESSED' as const,
+                uploadedAt: new Date(),
+              });
+              existingFileNames.add(s3Result.fileName);
+              console.log(`✅ ZIP original ajouté: ${s3Result.fileName}`);
+            }
+            
+            // Ajouter chaque fichier extrait
+            for (const extractedFile of s3Result.extractedFiles) {
+              if (!existingFileNames.has(extractedFile.fileName)) {
+                documentsToInsert.push({
+                  sessionId: newSession[0].id,
+                  fileName: extractedFile.fileName,
+                  url: extractedFile.s3Url,
+                  hash: extractedFile.hash,
+                  mimeType: extractedFile.mimeType,
+                  size: extractedFile.size,
+                  status: 'PROCESSED' as const,
+                  uploadedAt: new Date(),
+                });
+                existingFileNames.add(extractedFile.fileName);
+                console.log(`✅ Fichier extrait ajouté: ${extractedFile.fileName}`);
+              } else {
+                console.log(`⚠️ Fichier extrait ignoré (déjà existant): ${extractedFile.fileName}`);
+              }
+            }
+          } else {
+            // Traitement normal pour les fichiers non-ZIP
+            // Vérifier si ce document existe déjà (par nom de fichier)
+            if (existingFileNames.has(s3Result.fileName)) {
+              console.log(`⚠️ Document ${index + 1} ignoré (déjà existant): ${s3Result.fileName}`);
+              continue;
+            }
+            
+            documentsToInsert.push({
+              sessionId: newSession[0].id,
+              fileName: s3Result.fileName,
+              url: s3Result.s3Url, // ✅ URL S3 au lieu de Bubble
+              hash: s3Result.hash,
+              mimeType: s3Result.mimeType,
+              size: s3Result.size,
+              status: 'PROCESSED' as const, // Statut PROCESSED car converti vers S3
+              uploadedAt: new Date(),
+            });
+            
+            // Ajouter le nom de fichier à notre set pour éviter les doublons dans cette même requête
+            existingFileNames.add(s3Result.fileName);
+            
+            console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
           }
-          
-          documentsToInsert.push({
-            sessionId: newSession[0].id,
-            fileName: s3Result.fileName,
-            url: s3Result.s3Url, // ✅ URL S3 au lieu de Bubble
-            hash: s3Result.hash,
-            mimeType: s3Result.mimeType,
-            size: s3Result.size,
-            status: 'PROCESSED' as const, // Statut PROCESSED car converti vers S3
-            uploadedAt: new Date(),
-          });
-          
-          // Ajouter le nom de fichier à notre set pour éviter les doublons dans cette même requête
-          existingFileNames.add(s3Result.fileName);
-          
-          console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
           
         } catch (error) {
           console.error(`❌ Erreur conversion S3 document ${index + 1}:`, error);
@@ -640,6 +682,105 @@ export const getProjectDocumentsListPage = async (req: Request, res: Response): 
 };
 
 /**
+ * Génère une URL pré-signée pour accéder à un document
+ * @route GET /api/projects/:projectUniqueId/documents/:documentId/url
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @param {string} documentId - ID du document
+ * @returns {Object} URL pré-signée pour accéder au document
+ */
+export const getDocumentUrl = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, documentId } = req.params;
+    const { expiresIn = 3600 } = req.query; // Durée d'expiration en secondes (défaut: 1h)
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select({ id: projects.id, projectName: projects.projectName })
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer le document spécifique
+    const document = await db
+      .select({
+        id: documents.id,
+        fileName: documents.fileName,
+        url: documents.url,
+        mimeType: documents.mimeType,
+        size: documents.size,
+        status: documents.status,
+      })
+      .from(documents)
+      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+      .where(and(
+        eq(sessions.projectId, project[0].id),
+        eq(documents.id, documentId)
+      ))
+      .limit(1);
+
+    if (document.length === 0) {
+      return res.status(404).json({ 
+        error: 'Document not found',
+        code: 'DOCUMENT_NOT_FOUND'
+      });
+    }
+
+    const doc = document[0];
+    
+    // Vérifier que le document est traité
+    if (doc.status !== 'PROCESSED') {
+      return res.status(400).json({ 
+        error: 'Document not processed yet',
+        code: 'DOCUMENT_NOT_PROCESSED',
+        status: doc.status
+      });
+    }
+
+    // Générer l'URL pré-signée
+    try {
+      const presignedUrl = await generatePresignedUrlFromS3Url(doc.url, Number(expiresIn));
+      
+      console.log(`🔗 URL pré-signée générée pour ${doc.fileName} (expire dans ${expiresIn}s)`);
+      
+      // Retourner l'URL complète du serveur proxy au lieu de l'URL pré-signée qui ne fonctionne pas
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const proxyUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents/${documentId}/download`;
+      
+      res.json({
+        url: proxyUrl,
+        fileName: doc.fileName,
+        mimeType: doc.mimeType,
+        size: doc.size,
+        expiresIn: Number(expiresIn),
+        expiresAt: new Date(Date.now() + Number(expiresIn) * 1000).toISOString()
+      });
+      
+    } catch (urlError) {
+      console.error(`❌ Erreur génération URL pré-signée pour ${doc.fileName}:`, urlError);
+      return res.status(500).json({ 
+        error: 'Failed to generate document URL',
+        code: 'URL_GENERATION_ERROR',
+        details: (urlError as Error).message
+      });
+    }
+    
+  } catch (error) {
+    console.error('Error generating document URL:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'DOCUMENT_URL_ERROR'
+    });
+  }
+};
+
+/**
  * Sert un document directement depuis S3 (endpoint proxy pour Manus)
  * @route GET /api/projects/:projectUniqueId/documents/:documentId/download
  * @param {string} projectUniqueId - Identifiant unique du projet
@@ -690,33 +831,76 @@ export const downloadDocument = async (req: Request, res: Response): Promise<any
 
     const doc = document[0];
     
-    // Extraire la clé S3 depuis l'URL
+    // Extraire la clé S3 depuis l'URL en utilisant la fonction utilitaire
     const s3Url = doc.url;
-    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
-    const region = process.env.AWS_S3_REGION || 'eu-north-1';
     
-    // Pattern: https://bucket.s3.region.amazonaws.com/key
-    const s3UrlPattern = new RegExp(`https://${bucketName}\\.s3\\.${region}\\.amazonaws\\.com/(.+)`);
-    const match = s3Url.match(s3UrlPattern);
-    
-    if (!match) {
+    let s3Key: string;
+    try {
+      // Essayer d'abord avec la version décodée
+      s3Key = extractS3KeyFromUrl(s3Url);
+    } catch (error) {
+      console.error(`❌ Erreur extraction clé S3 pour ${doc.fileName}:`, error);
       return res.status(400).json({ 
         error: 'Invalid S3 URL format',
-        code: 'INVALID_S3_URL'
+        code: 'INVALID_S3_URL',
+        details: (error as Error).message
       });
     }
-    
-    const s3Key = match[1];
     
     console.log(`📥 Téléchargement document: ${doc.fileName} (${s3Key})`);
     
     // Récupérer le fichier depuis S3
-    const getCommand = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: s3Key,
-    });
+    const bucketName = process.env.AWS_S3_BUCKET_NAME!;
     
-    const s3Response = await s3Client.send(getCommand);
+    let s3Response;
+    let finalS3Key = s3Key;
+    
+    // Essayer d'abord avec la clé décodée
+    try {
+      const getCommand = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: s3Key,
+      });
+      s3Response = await s3Client.send(getCommand);
+    } catch (s3Error: any) {
+      console.error(`❌ Erreur S3 avec clé décodée (${s3Key}):`, s3Error.name);
+      
+      if (s3Error.name === 'NoSuchKey') {
+        // Essayer avec la clé brute (non décodée)
+        try {
+          const rawS3Key = extractS3KeyFromUrlRaw(s3Url);
+          console.log(`🔄 Tentative avec clé brute: ${rawS3Key}`);
+          
+          const getCommandRaw = new GetObjectCommand({
+            Bucket: bucketName,
+            Key: rawS3Key,
+          });
+          s3Response = await s3Client.send(getCommandRaw);
+          finalS3Key = rawS3Key;
+          console.log(`✅ Succès avec clé brute: ${rawS3Key}`);
+        } catch (rawError: any) {
+          console.error(`❌ Erreur S3 avec clé brute (${extractS3KeyFromUrlRaw(s3Url)}):`, rawError.name);
+          
+          return res.status(404).json({ 
+            error: 'Document not found in storage',
+            code: 'DOCUMENT_NOT_FOUND_IN_STORAGE',
+            details: `File not found with decoded key: ${s3Key} or raw key: ${extractS3KeyFromUrlRaw(s3Url)}`
+          });
+        }
+      } else if (s3Error.name === 'AccessDenied') {
+        return res.status(403).json({ 
+          error: 'Access denied to document',
+          code: 'DOCUMENT_ACCESS_DENIED',
+          details: `Access denied for: ${s3Key}`
+        });
+      } else {
+        return res.status(500).json({ 
+          error: 'Storage error',
+          code: 'STORAGE_ERROR',
+          details: s3Error.message
+        });
+      }
+    }
     
     if (!s3Response.Body) {
       return res.status(404).json({ 
@@ -728,9 +912,12 @@ export const downloadDocument = async (req: Request, res: Response): Promise<any
     // Configurer les headers de réponse
     res.setHeader('Content-Type', doc.mimeType);
     
+    // Pour l'affichage : utiliser inline, pour le téléchargement : utiliser attachment
+    const disposition = req.query.download === 'true' ? 'attachment' : 'inline';
+    
     // Encoder correctement le nom de fichier pour éviter les erreurs avec les caractères spéciaux
     const encodedFileName = encodeURIComponent(doc.fileName);
-    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedFileName}`);
+    res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${encodedFileName}`);
     
     res.setHeader('Content-Length', doc.size.toString());
     res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache 1h
