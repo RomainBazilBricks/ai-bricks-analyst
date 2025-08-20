@@ -245,13 +245,14 @@ export const consolidated_data = pgTable('consolidated_data', {
   
   // Données Financières
   financialAcquisitionPrice: decimal('financial_acquisition_price', { precision: 15, scale: 2 }),
+  financialAcquisitionPricePerSqm: decimal('financial_acquisition_price_per_sqm', { precision: 10, scale: 2 }),
+  financialMarketPricePerSqm: decimal('financial_market_price_per_sqm', { precision: 10, scale: 2 }),
   financialWorksCost: decimal('financial_works_cost', { precision: 15, scale: 2 }),
   financialPlannedResalePrice: decimal('financial_planned_resale_price', { precision: 15, scale: 2 }),
   financialPersonalContribution: decimal('financial_personal_contribution', { precision: 15, scale: 2 }),
   
   // Données du Bien
   propertyLivingArea: decimal('property_living_area', { precision: 10, scale: 2 }),
-  propertyMarketReferencePrice: decimal('property_market_reference_price', { precision: 15, scale: 2 }),
   propertyMonthlyRentExcludingTax: decimal('property_monthly_rent_excluding_tax', { precision: 10, scale: 2 }),
   propertyPresoldUnits: integer('property_presold_units'),
   propertyTotalUnits: integer('property_total_units'),
@@ -561,6 +562,8 @@ export const ConsolidatedDataPayloadSchema = z.object({
     // Données Financières - toutes optionnelles car peuvent ne pas être trouvées
     financial: z.object({
       acquisitionPrice: z.number().nullable().optional(),
+      acquisitionPricePerSqm: z.number().nullable().optional(),
+      marketPricePerSqm: z.number().nullable().optional(),
       worksCost: z.number().nullable().optional(),
       plannedResalePrice: z.number().nullable().optional(),
       personalContribution: z.number().nullable().optional(),
@@ -569,7 +572,6 @@ export const ConsolidatedDataPayloadSchema = z.object({
     // Données du Bien - toutes optionnelles
     property: z.object({
       livingArea: z.number().nullable().optional(),
-      marketReferencePrice: z.number().nullable().optional(),
       monthlyRentExcludingTax: z.number().nullable().optional(),
       presoldUnits: z.number().int().nullable().optional(),
       totalUnits: z.number().int().nullable().optional(),

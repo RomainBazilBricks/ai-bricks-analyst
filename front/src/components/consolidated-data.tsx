@@ -173,6 +173,14 @@ export const ConsolidatedDataComponent = ({ projectUniqueId, latestConversationU
                   <p className="text-xs text-gray-600 mb-0.5">Apport</p>
                   <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialPersonalContribution)}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Coût/m² acquisition</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialAcquisitionPricePerSqm)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-600 mb-0.5">Prix marché/m²</p>
+                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.financialMarketPricePerSqm)}</p>
+                </div>
               </div>
             </div>
 
@@ -186,10 +194,6 @@ export const ConsolidatedDataComponent = ({ projectUniqueId, latestConversationU
                 <div>
                   <p className="text-xs text-gray-600 mb-0.5">Surface</p>
                   <p className="text-sm font-medium text-gray-900">{formatNumber(consolidatedData.propertyLivingArea, " m²")}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 mb-0.5">Prix marché</p>
-                  <p className="text-sm font-medium text-gray-900">{formatCurrency(consolidatedData.propertyMarketReferencePrice)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-600 mb-0.5">Loyers HT</p>

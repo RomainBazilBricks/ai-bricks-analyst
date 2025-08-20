@@ -749,12 +749,13 @@ export const receiveConsolidatedData = async (req: Request, res: Response): Prom
       projectId: project[0].id,
       // Données Financières
       financialAcquisitionPrice: validatedData.consolidatedData.financial?.acquisitionPrice?.toString(),
+      financialAcquisitionPricePerSqm: validatedData.consolidatedData.financial?.acquisitionPricePerSqm?.toString(),
+      financialMarketPricePerSqm: validatedData.consolidatedData.financial?.marketPricePerSqm?.toString(),
       financialWorksCost: validatedData.consolidatedData.financial?.worksCost?.toString(),
       financialPlannedResalePrice: validatedData.consolidatedData.financial?.plannedResalePrice?.toString(),
       financialPersonalContribution: validatedData.consolidatedData.financial?.personalContribution?.toString(),
       // Données du Bien
       propertyLivingArea: validatedData.consolidatedData.property?.livingArea?.toString(),
-      propertyMarketReferencePrice: validatedData.consolidatedData.property?.marketReferencePrice?.toString(),
       propertyMonthlyRentExcludingTax: validatedData.consolidatedData.property?.monthlyRentExcludingTax?.toString(),
       propertyPresoldUnits: validatedData.consolidatedData.property?.presoldUnits,
       propertyTotalUnits: validatedData.consolidatedData.property?.totalUnits,

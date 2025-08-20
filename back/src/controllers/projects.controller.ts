@@ -790,11 +790,12 @@ export const getConsolidatedData = async (req: Request, res: Response): Promise<
     const formattedData = {
       ...consolidatedData[0],
       financialAcquisitionPrice: consolidatedData[0].financialAcquisitionPrice ? parseFloat(consolidatedData[0].financialAcquisitionPrice) : null,
+      financialAcquisitionPricePerSqm: consolidatedData[0].financialAcquisitionPricePerSqm ? parseFloat(consolidatedData[0].financialAcquisitionPricePerSqm) : null,
+      financialMarketPricePerSqm: consolidatedData[0].financialMarketPricePerSqm ? parseFloat(consolidatedData[0].financialMarketPricePerSqm) : null,
       financialWorksCost: consolidatedData[0].financialWorksCost ? parseFloat(consolidatedData[0].financialWorksCost) : null,
       financialPlannedResalePrice: consolidatedData[0].financialPlannedResalePrice ? parseFloat(consolidatedData[0].financialPlannedResalePrice) : null,
       financialPersonalContribution: consolidatedData[0].financialPersonalContribution ? parseFloat(consolidatedData[0].financialPersonalContribution) : null,
       propertyLivingArea: consolidatedData[0].propertyLivingArea ? parseFloat(consolidatedData[0].propertyLivingArea) : null,
-      propertyMarketReferencePrice: consolidatedData[0].propertyMarketReferencePrice ? parseFloat(consolidatedData[0].propertyMarketReferencePrice) : null,
       propertyMonthlyRentExcludingTax: consolidatedData[0].propertyMonthlyRentExcludingTax ? parseFloat(consolidatedData[0].propertyMonthlyRentExcludingTax) : null,
       propertyPreMarketingRate: consolidatedData[0].propertyPreMarketingRate ? parseFloat(consolidatedData[0].propertyPreMarketingRate) : null,
       companyNetResultYear1: consolidatedData[0].companyNetResultYear1 ? parseFloat(consolidatedData[0].companyNetResultYear1) : null,

@@ -120,6 +120,13 @@
       "when": 1755400060000,
       "tag": "0016_add_conversation_fiche_to_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1755683240678,
+      "tag": "0017_minor_dakota_north",
+      "breakpoints": true
     }
   ]
 }

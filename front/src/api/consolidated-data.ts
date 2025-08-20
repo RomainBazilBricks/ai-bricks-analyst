@@ -8,12 +8,13 @@ export type ConsolidatedData = {
   projectId: string;
   // Données financières
   financialAcquisitionPrice: number | null;
+  financialAcquisitionPricePerSqm: number | null;
+  financialMarketPricePerSqm: number | null;
   financialWorksCost: number | null;
   financialPlannedResalePrice: number | null;
   financialPersonalContribution: number | null;
   // Données du bien
   propertyLivingArea: number | null;
-  propertyMarketReferencePrice: number | null;
   propertyMonthlyRentExcludingTax: number | null;
   propertyPresoldUnits: number | null;
   propertyTotalUnits: number | null;
