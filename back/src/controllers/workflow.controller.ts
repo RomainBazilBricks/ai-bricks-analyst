@@ -803,7 +803,7 @@ export const receiveConsolidatedData = async (req: Request, res: Response): Prom
     let nextStepError;
     if (skipAutoTrigger !== 'true') {
       console.log(`✅ Étape 2 terminée, déclenchement automatique de l'étape 3 pour le projet: ${projectUniqueId}`);
-      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.id || 0);
+      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.order || 2);
       nextStepTriggered = nextStepResult.success;
       nextStepError = nextStepResult.error;
       
@@ -1129,7 +1129,7 @@ export const receiveAnalysisMacro = async (req: Request, res: Response): Promise
     let nextStepError;
     if (skipAutoTrigger !== 'true') {
       console.log(`✅ Étape 1 terminée, déclenchement automatique de l'étape 2 pour le projet: ${projectUniqueId}`);
-      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.id || 0);
+      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.order || 1);
       nextStepTriggered = nextStepResult.success;
       nextStepError = nextStepResult.error;
       
