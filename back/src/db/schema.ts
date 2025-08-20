@@ -115,6 +115,8 @@ export const project_owners = pgTable('project_owners', {
   name: varchar('name', { length: 256 }).notNull(),
   experienceYears: integer('experience_years').notNull(),
   reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
+  reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
+  reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -125,6 +127,8 @@ export const companies = pgTable('companies', {
   name: varchar('name', { length: 512 }).notNull(),
   siret: varchar('siret', { length: 14 }).notNull().unique(),
   reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
+  reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
+  reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -598,7 +602,26 @@ export const ConsolidatedDataPayloadSchema = z.object({
   }),
 });
 
-// Schema for final message payload (Step 5) - Simplifié
+// Schema for reputation analysis payload (Step 3)
+export const ReputationAnalysisPayloadSchema = z.object({
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  reputationAnalysis: z.object({
+    projectOwners: z.array(z.object({
+      name: z.string().min(1, 'Owner name is required'),
+      experienceYears: z.number().int().nonnegative('Experience years must be non-negative'),
+      reputationScore: z.number().int().min(0).max(10, 'Reputation score must be between 0 and 10'),
+      reputationJustification: z.string().min(1, 'Reputation justification is required'),
+    })).min(1, 'At least one project owner is required'),
+    companies: z.array(z.object({
+      name: z.string().min(1, 'Company name is required'),
+      siret: z.string().length(14, 'SIRET must be 14 characters').optional(),
+      reputationScore: z.number().int().min(0).max(10, 'Reputation score must be between 0 and 10'),
+      reputationJustification: z.string().min(1, 'Reputation justification is required'),
+    })).min(1, 'At least one company is required'),
+  }),
+});
+
+// Schema for final message payload (Step 6) - Simplifié
 export const FinalMessagePayloadSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   message: z.string().min(1, 'Final message content is required'),

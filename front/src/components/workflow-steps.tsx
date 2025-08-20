@@ -19,7 +19,8 @@ import {
   Code,
   Loader2,
   FileText,
-  Package
+  Package,
+  Shield
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 
@@ -311,8 +312,12 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
       case 2:
         return <BarChart3 className="h-5 w-5" />;
       case 3:
-        return <FolderOpen className="h-5 w-5" />;
+        return <Shield className="h-5 w-5" />;
       case 4:
+        return <FolderOpen className="h-5 w-5" />;
+      case 5:
+        return <AlertCircle className="h-5 w-5" />;
+      case 6:
         return <MessageCircle className="h-5 w-5" />;
       default:
         return <FileText className="h-5 w-5" />;

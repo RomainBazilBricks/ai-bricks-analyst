@@ -8,10 +8,12 @@ import {
   updateWorkflowStep,
   updateOverviewStep,
   updateAnalysisStep,
+  updateReputationStep,
   updateDocumentsStep,
   updateVigilanceStep,
   updateMessageStep,
   receiveConsolidatedData,
+  receiveReputationAnalysis,
   receiveAnalysisMacro,
   receiveMissingDocuments,
   testPromptProcessing,
@@ -110,31 +112,40 @@ router.post('/step-1-overview', updateOverviewStep);
 router.post('/step-2-analysis', updateAnalysisStep);
 
 /**
- * Endpoint pour l'étape 3: Récupération des documents manquants
- * @route POST /api/workflow/step-3-documents
+ * Endpoint pour l'étape 3: Analyse de réputation
+ * @route POST /api/workflow/step-3-reputation
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
  * @access Public (pour Manus)
  */
-router.post('/step-3-documents', updateDocumentsStep);
+router.post('/step-3-reputation', updateReputationStep);
 
 /**
- * Endpoint pour l'étape 4: Points de vigilance
- * @route POST /api/workflow/step-4-vigilance
+ * Endpoint pour l'étape 4: Récupération des documents manquants
+ * @route POST /api/workflow/step-4-documents
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
  * @access Public (pour Manus)
  */
-router.post('/step-4-vigilance', updateVigilanceStep);
+router.post('/step-4-documents', updateDocumentsStep);
 
 /**
- * Endpoint pour l'étape 5: Rédaction d'un message
- * @route POST /api/workflow/step-5-message
+ * Endpoint pour l'étape 5: Points de vigilance
+ * @route POST /api/workflow/step-5-vigilance
  * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
  * @returns {Object} Message de confirmation
  * @access Public (pour Manus)
  */
-router.post('/step-5-message', updateMessageStep);
+router.post('/step-5-vigilance', updateVigilanceStep);
+
+/**
+ * Endpoint pour l'étape 6: Rédaction d'un message
+ * @route POST /api/workflow/step-6-message
+ * @param {WorkflowStepEndpointInput} body - Contenu et URL de conversation
+ * @returns {Object} Message de confirmation
+ * @access Public (pour Manus)
+ */
+router.post('/step-6-message', updateMessageStep);
 
 /**
  * Nouveaux endpoints pour les analyses IA structurées
@@ -157,10 +168,19 @@ router.post('/step-5-message', updateMessageStep);
  */
 router.post('/consolidated-data/:projectUniqueId', receiveConsolidatedData);
 
+/**
+ * Endpoint pour recevoir l'analyse de réputation de l'IA (Étape 3)
+ * @route POST /api/workflow/reputation-analysis/:projectUniqueId
+ * @param {ReputationAnalysisPayload} body - Données d'analyse de réputation
+ * @returns {ReputationAnalysisResponse} Confirmation et données sauvegardées
+ * @access Public (pour IA)
+ */
+router.post('/reputation-analysis/:projectUniqueId', receiveReputationAnalysis);
+
 router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
 
 /**
- * Endpoint pour recevoir les documents manquants de l'IA (Étape 3)
+ * Endpoint pour recevoir les documents manquants de l'IA (Étape 4)
  * @route POST /api/workflow/missing-documents/:projectUniqueId
  * @param {MissingDocumentsPayload} body - Liste des documents manquants
  * @returns {MissingDocumentsResponse} Confirmation et documents créés
@@ -169,7 +189,7 @@ router.post('/analysis-macro/:projectUniqueId', receiveAnalysisMacro);
 router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
 
 /**
- * Endpoint pour recevoir les forces et faiblesses de l'IA (Étape 4)
+ * Endpoint pour recevoir les forces et faiblesses de l'IA (Étape 5)
  * @route POST /api/workflow/strengths-and-weaknesses/:projectUniqueId
  * @param {StrengthsWeaknessesPayload} body - Liste des forces et faiblesses
  * @returns {StrengthsWeaknessesResponse} Confirmation et points créés
@@ -178,7 +198,7 @@ router.post('/missing-documents/:projectUniqueId', receiveMissingDocuments);
 router.post('/strengths-and-weaknesses/:projectUniqueId', receiveStrengthsAndWeaknesses);
 
 /**
- * Endpoint pour recevoir le message final de l'IA (Étape 5)
+ * Endpoint pour recevoir le message final de l'IA (Étape 6)
  * @route POST /api/workflow/final-message/:projectUniqueId
  * @param {FinalMessagePayload} body - Message final et synthèse
  * @returns {FinalMessageResponse} Confirmation et workflow terminé

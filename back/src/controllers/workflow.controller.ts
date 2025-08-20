@@ -21,7 +21,10 @@ import {
   StrengthsWeaknessesPayloadSchema,
   FinalMessagePayloadSchema,
   ConsolidatedDataPayloadSchema,
+  ReputationAnalysisPayloadSchema,
   consolidated_data,
+  project_owners,
+  companies,
   WorkflowStatus,
   api_configurations
 } from '@/db/schema';
@@ -834,6 +837,216 @@ export const receiveConsolidatedData = async (req: Request, res: Response): Prom
   }
 };
 
+/**
+ * Endpoint pour recevoir l'analyse de réputation de l'IA (Étape 3)
+ * @route POST /api/workflow/reputation-analysis/:projectUniqueId
+ * @param {ReputationAnalysisPayload} body - Données d'analyse de réputation
+ * @returns {ReputationAnalysisResponse} Confirmation et données sauvegardées
+ * @access Public (pour IA)
+ */
+export const receiveReputationAnalysis = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+    const { skipAutoTrigger } = req.query; // Paramètre pour le mode debug
+    const validatedData = ReputationAnalysisPayloadSchema.parse({ 
+      ...req.body,
+      projectUniqueId 
+    });
+
+    console.log(`📊 Réception de l'analyse de réputation pour le projet: ${projectUniqueId}`);
+
+    // Vérifier que le projet existe
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Traiter les porteurs de projet
+    const createdOwners = [];
+    for (const owner of validatedData.reputationAnalysis.projectOwners) {
+      // Vérifier si le porteur existe déjà
+      const existingOwner = await db
+        .select()
+        .from(project_owners)
+        .where(and(
+          eq(project_owners.projectId, project[0].id),
+          eq(project_owners.name, owner.name)
+        ))
+        .limit(1);
+
+      if (existingOwner.length > 0) {
+        // Mettre à jour le porteur existant
+        const updatedOwner = await db
+          .update(project_owners)
+          .set({
+            experienceYears: owner.experienceYears,
+            reputationScore: owner.reputationScore,
+            reputationJustification: owner.reputationJustification,
+          })
+          .where(eq(project_owners.id, existingOwner[0].id))
+          .returning();
+        
+        createdOwners.push(updatedOwner[0]);
+      } else {
+        // Créer un nouveau porteur
+        const newOwner = await db
+          .insert(project_owners)
+          .values({
+            projectId: project[0].id,
+            name: owner.name,
+            experienceYears: owner.experienceYears,
+            reputationScore: owner.reputationScore,
+            reputationJustification: owner.reputationJustification,
+          })
+          .returning();
+        
+        createdOwners.push(newOwner[0]);
+      }
+    }
+
+    // Traiter les sociétés
+    const createdCompanies = [];
+    for (const company of validatedData.reputationAnalysis.companies) {
+      // Vérifier si la société existe déjà
+      const existingCompany = await db
+        .select()
+        .from(companies)
+        .where(and(
+          eq(companies.projectId, project[0].id),
+          eq(companies.name, company.name)
+        ))
+        .limit(1);
+
+      if (existingCompany.length > 0) {
+        // Mettre à jour la société existante
+        const updatedCompany = await db
+          .update(companies)
+          .set({
+            reputationScore: company.reputationScore,
+            reputationJustification: company.reputationJustification,
+            ...(company.siret && { siret: company.siret }),
+          })
+          .where(eq(companies.id, existingCompany[0].id))
+          .returning();
+        
+        createdCompanies.push(updatedCompany[0]);
+      } else {
+        // Créer une nouvelle société
+        const newCompany = await db
+          .insert(companies)
+          .values({
+            projectId: project[0].id,
+            name: company.name,
+            siret: company.siret || `TEMP${Date.now()}`, // SIRET temporaire si non fourni
+            reputationScore: company.reputationScore,
+            reputationJustification: company.reputationJustification,
+          })
+          .returning();
+        
+        createdCompanies.push(newCompany[0]);
+      }
+    }
+
+    console.log(`✅ ${createdOwners.length} porteurs et ${createdCompanies.length} sociétés traités pour le projet ${projectUniqueId}`);
+
+    // Récupérer l'étape d'analyse avec order = 3 (analyse de réputation)
+    const analysisStep = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 3),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (analysisStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape d\'analyse non trouvée (order = 3)',
+        code: 'ANALYSIS_STEP_NOT_FOUND'
+      });
+    }
+
+    // Mettre à jour l'étape du workflow
+    const workflowStep = await db
+      .select({
+        workflow: project_analysis_progress,
+        step: analysis_steps
+      })
+      .from(project_analysis_progress)
+      .leftJoin(analysis_steps, eq(project_analysis_progress.stepId, analysis_steps.id))
+      .where(
+        and(
+          eq(project_analysis_progress.projectId, project[0].id),
+          eq(project_analysis_progress.stepId, analysisStep[0].id)
+        )
+      )
+      .limit(1);
+
+    if (workflowStep.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape de workflow non trouvée',
+        code: 'WORKFLOW_STEP_NOT_FOUND'
+      });
+    }
+
+    // Marquer l'étape comme terminée
+    const updatedStep = await db
+      .update(project_analysis_progress)
+      .set({
+        status: 'completed',
+        content: `Analyse de réputation terminée: ${createdOwners.length} porteurs et ${createdCompanies.length} sociétés analysés`,
+        completedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_progress.id, workflowStep[0].workflow.id))
+      .returning();
+
+    // Déclencher automatiquement l'étape suivante seulement si pas en mode debug
+    let nextStepTriggered = false;
+    let nextStepError;
+    if (skipAutoTrigger !== 'true') {
+      console.log(`✅ Étape 3 terminée, déclenchement automatique de l'étape 4 pour le projet: ${projectUniqueId}`);
+      const nextStepResult = await triggerNextWorkflowStep(projectUniqueId, workflowStep[0].step?.order || 3);
+      nextStepTriggered = nextStepResult.success;
+      nextStepError = nextStepResult.error;
+      
+      if (nextStepResult.success) {
+        console.log(`🚀 Étape suivante déclenchée automatiquement avec succès`);
+      } else {
+        console.warn(`⚠️ Impossible de déclencher l'étape suivante automatiquement: ${nextStepResult.error}`);
+      }
+    } else {
+      console.log(`🔧 Mode debug activé - étape suivante non déclenchée automatiquement`);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Analyse de réputation reçue et enregistrée avec succès',
+      workflowStepId: updatedStep[0].id,
+      data: {
+        projectOwners: createdOwners,
+        companies: createdCompanies
+      },
+      nextStepTriggered,
+      nextStepError,
+      debugMode: skipAutoTrigger === 'true'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RECEIVE_REPUTATION_ANALYSIS_ERROR'
+    });
+  }
+};
+
 // Endpoints spécifiques pour chaque étape (appelés par Manus)
 
 /**
@@ -924,14 +1137,14 @@ export const updateAnalysisStep = async (req: Request, res: Response): Promise<a
 };
 
 /**
- * Endpoint pour l'étape 3: Récupération des documents manquants
- * @route POST /api/workflow/step-3-documents
+ * Endpoint pour l'étape 3: Analyse de réputation
+ * @route POST /api/workflow/step-3-reputation
  */
-export const updateDocumentsStep = async (req: Request, res: Response): Promise<any> => {
+export const updateReputationStep = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId, content, manusConversationUrl }: WorkflowStepEndpointInput = req.body;
 
-    // Récupérer le vrai stepId de l'étape avec order = 3
+    // Récupérer le vrai stepId de l'étape avec order = 3 (analyse de réputation)
     const step = await db
       .select()
       .from(analysis_steps)
@@ -952,8 +1165,8 @@ export const updateDocumentsStep = async (req: Request, res: Response): Promise<
       projectUniqueId,
       stepId: step[0].id, // Utiliser le vrai ID au lieu de l'order
       status: 'completed',
-      content,
-      manusConversationUrl
+      content: content || '',
+      manusConversationUrl: manusConversationUrl || undefined,
     };
 
     req.body = updateData;
@@ -961,20 +1174,20 @@ export const updateDocumentsStep = async (req: Request, res: Response): Promise<
   } catch (error) {
     res.status(500).json({ 
       error: (error as Error).message,
-      code: 'UPDATE_DOCUMENTS_STEP_ERROR'
+      code: 'UPDATE_REPUTATION_STEP_ERROR'
     });
   }
 };
 
 /**
- * Endpoint pour l'étape 4: Points de vigilance
- * @route POST /api/workflow/step-4-vigilance
+ * Endpoint pour l'étape 4: Récupération des documents manquants
+ * @route POST /api/workflow/step-4-documents
  */
-export const updateVigilanceStep = async (req: Request, res: Response): Promise<any> => {
+export const updateDocumentsStep = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId, content, manusConversationUrl }: WorkflowStepEndpointInput = req.body;
 
-    // Récupérer le vrai stepId de l'étape avec order = 4
+    // Récupérer le vrai stepId de l'étape avec order = 4 (documents manquants)
     const step = await db
       .select()
       .from(analysis_steps)
@@ -1004,20 +1217,20 @@ export const updateVigilanceStep = async (req: Request, res: Response): Promise<
   } catch (error) {
     res.status(500).json({ 
       error: (error as Error).message,
-      code: 'UPDATE_VIGILANCE_STEP_ERROR'
+      code: 'UPDATE_DOCUMENTS_STEP_ERROR'
     });
   }
 };
 
 /**
- * Endpoint pour l'étape 5: Rédaction d'un message
- * @route POST /api/workflow/step-5-message
+ * Endpoint pour l'étape 5: Points de vigilance
+ * @route POST /api/workflow/step-5-vigilance
  */
-export const updateMessageStep = async (req: Request, res: Response): Promise<any> => {
+export const updateVigilanceStep = async (req: Request, res: Response): Promise<any> => {
   try {
     const { projectUniqueId, content, manusConversationUrl }: WorkflowStepEndpointInput = req.body;
 
-    // Récupérer le vrai stepId de l'étape avec order = 5
+    // Récupérer le vrai stepId de l'étape avec order = 5 (points de vigilance)
     const step = await db
       .select()
       .from(analysis_steps)
@@ -1030,6 +1243,49 @@ export const updateMessageStep = async (req: Request, res: Response): Promise<an
     if (step.length === 0) {
       return res.status(404).json({ 
         error: 'Étape d\'analyse non trouvée (order = 5)',
+        code: 'ANALYSIS_STEP_NOT_FOUND'
+      });
+    }
+
+    const updateData: UpdateWorkflowStepInput = {
+      projectUniqueId,
+      stepId: step[0].id, // Utiliser le vrai ID au lieu de l'order
+      status: 'completed',
+      content,
+      manusConversationUrl
+    };
+
+    req.body = updateData;
+    return await updateWorkflowStep(req, res);
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'UPDATE_VIGILANCE_STEP_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour l'étape 6: Rédaction d'un message
+ * @route POST /api/workflow/step-6-message
+ */
+export const updateMessageStep = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, content, manusConversationUrl }: WorkflowStepEndpointInput = req.body;
+
+    // Récupérer le vrai stepId de l'étape avec order = 6 (rédaction message)
+    const step = await db
+      .select()
+      .from(analysis_steps)
+      .where(and(
+        eq(analysis_steps.order, 6),
+        eq(analysis_steps.isActive, 1)
+      ))
+      .limit(1);
+
+    if (step.length === 0) {
+      return res.status(404).json({ 
+        error: 'Étape d\'analyse non trouvée (order = 6)',
         code: 'ANALYSIS_STEP_NOT_FOUND'
       });
     }
@@ -1212,19 +1468,19 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
 
     console.log(`✅ ${createdDocuments.length} nouveaux documents manquants créés pour le projet ${projectUniqueId}`);
 
-    // Récupérer l'étape d'analyse avec order = 3 (documents manquants)
+    // Récupérer l'étape d'analyse avec order = 4 (documents manquants)
     const analysisStep = await db
       .select()
       .from(analysis_steps)
       .where(and(
-        eq(analysis_steps.order, 3),
+        eq(analysis_steps.order, 4),
         eq(analysis_steps.isActive, 1)
       ))
       .limit(1);
 
     if (analysisStep.length === 0) {
       return res.status(404).json({ 
-        error: 'Étape d\'analyse non trouvée (order = 3)',
+        error: 'Étape d\'analyse non trouvée (order = 4)',
         code: 'ANALYSIS_STEP_NOT_FOUND'
       });
     }
@@ -1388,19 +1644,19 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
 
     console.log(`✅ ${createdItems.length} nouvelles forces/faiblesses créées pour le projet ${projectUniqueId}`);
 
-    // Récupérer l'étape d'analyse avec order = 4 (points de vigilance)
+    // Récupérer l'étape d'analyse avec order = 5 (points de vigilance)
     const analysisStep = await db
       .select()
       .from(analysis_steps)
       .where(and(
-        eq(analysis_steps.order, 4),
+        eq(analysis_steps.order, 5),
         eq(analysis_steps.isActive, 1)
       ))
       .limit(1);
 
     if (analysisStep.length === 0) {
       return res.status(404).json({ 
-        error: 'Étape d\'analyse non trouvée (order = 4)',
+        error: 'Étape d\'analyse non trouvée (order = 5)',
         code: 'ANALYSIS_STEP_NOT_FOUND'
       });
     }
@@ -1511,7 +1767,7 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
       .select()
       .from(analysis_steps)
       .where(and(
-        eq(analysis_steps.order, 5),
+        eq(analysis_steps.order, 6),
         eq(analysis_steps.isActive, 1)
       ))
       .limit(1);
@@ -1561,7 +1817,7 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
     // Utiliser l'étape d'analyse déjà récupérée plus haut (analysisStep)
     if (analysisStep.length === 0) {
       return res.status(404).json({ 
-        error: 'Étape d\'analyse non trouvée (order = 5)',
+        error: 'Étape d\'analyse non trouvée (order = 6)',
         code: 'ANALYSIS_STEP_NOT_FOUND'
       });
     }
@@ -1589,7 +1845,7 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
         .where(eq(project_analysis_progress.id, workflowStep[0].id));
     }
 
-    // Pour l'étape 5 (dernière étape), pas de déclenchement automatique
+    // Pour l'étape 6 (dernière étape), pas de déclenchement automatique
     // Le workflow est maintenant terminé
     console.log(`✅ Workflow terminé pour le projet: ${projectUniqueId}`);
 
