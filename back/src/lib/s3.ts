@@ -289,7 +289,7 @@ export function extractS3KeyFromUrlRaw(s3Url: string): string {
 /**
  * Télécharge un fichier depuis S3
  */
-async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
+export async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
   let s3Response;
   
   // Essayer d'abord avec la clé décodée
@@ -465,7 +465,7 @@ export async function createZipFromDocuments(
       Key: s3Key,
       Body: zipBuffer,
       ContentType: 'application/zip',
-      // ACL supprimé car le bucket ne les autorise pas
+      // ACL retiré - le bucket ne les autorise plus du tout
       Metadata: {
         projectUniqueId,
         documentCount: filteredDocuments.length.toString(),

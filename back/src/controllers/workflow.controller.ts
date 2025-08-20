@@ -1990,8 +1990,12 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     // Utiliser l'infrastructure existante pour envoyer à l'API Python
     // Même format que external-tools.ts mais avec zip_url
+    // Construire l'URL proxy au lieu d'utiliser l'URL S3 directe
+    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+    const proxyZipUrl = `${baseUrl}/api/projects/${projectUniqueId}/zip/download`;
+    
     const payload = {
-      zip_url: zipResult.s3Url,
+      zip_url: proxyZipUrl,
       message: dynamicMessage,
       platform: 'manus',
       projectUniqueId

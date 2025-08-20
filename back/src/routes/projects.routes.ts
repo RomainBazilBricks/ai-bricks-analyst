@@ -8,6 +8,7 @@ import {
   getProjectDocumentsListPage,
   getDocumentUrl,
   downloadDocument,
+  downloadProjectZip,
   getConsolidatedData,
   getMissingDocuments,
   updateMissingDocumentStatus,
@@ -84,6 +85,12 @@ router.get('/:projectUniqueId/documents/:documentId/url', getDocumentUrl);
  * @description Télécharge un document directement depuis S3 (endpoint proxy pour Manus)
  */
 router.get('/:projectUniqueId/documents/:documentId/download', downloadDocument);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/zip/download
+ * @description Télécharge le ZIP du projet via proxy serveur
+ */
+router.get('/:projectUniqueId/zip/download', downloadProjectZip);
 
 /**
  * @route GET /api/projects/:projectUniqueId/consolidated-data

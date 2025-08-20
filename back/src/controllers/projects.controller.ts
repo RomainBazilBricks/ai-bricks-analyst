@@ -16,7 +16,7 @@ import {
   consolidated_data
 } from '@/db/schema';
 import { initiateWorkflowForProject, uploadZipFromUrl } from '@/controllers/workflow.controller';
-import { uploadFileFromUrl, s3Client, extractS3KeyFromUrl, extractS3KeyFromUrlRaw, generatePresignedUrlFromS3Url } from '@/lib/s3';
+import { uploadFileFromUrl, s3Client, extractS3KeyFromUrl, extractS3KeyFromUrlRaw, generatePresignedUrlFromS3Url, downloadFileFromS3 } from '@/lib/s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
   CreateProjectInput, 
@@ -1792,6 +1792,84 @@ export const updateStrengthStatus = async (req: Request, res: Response): Promise
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'UPDATE_STRENGTH_STATUS_ERROR'
+    });
+  }
+};
+
+/**
+ * Télécharge le ZIP d'un projet via proxy serveur
+ * @route GET /api/projects/:projectUniqueId/zip/download
+ */
+export const downloadProjectZip = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    console.log(`📦 Téléchargement ZIP pour projet: ${projectUniqueId}`);
+
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier que le projet a un ZIP
+    if (!project[0].zipUrl) {
+      return res.status(404).json({
+        error: 'No ZIP file found for this project',
+        code: 'ZIP_NOT_FOUND'
+      });
+    }
+
+    console.log(`📦 Téléchargement ZIP depuis: ${project[0].zipUrl}`);
+
+    // Télécharger le fichier depuis S3
+    let fileBuffer: Buffer;
+    try {
+      fileBuffer = await downloadFileFromS3(project[0].zipUrl);
+    } catch (error: any) {
+      console.error('Erreur téléchargement ZIP S3:', error);
+      
+      if (error.name === 'NoSuchKey') {
+        return res.status(404).json({
+          error: 'ZIP file not found in storage',
+          code: 'ZIP_NOT_FOUND_IN_STORAGE'
+        });
+      }
+      
+      if (error.name === 'AccessDenied') {
+        return res.status(403).json({
+          error: 'Access denied to ZIP file',
+          code: 'ZIP_ACCESS_DENIED'
+        });
+      }
+      
+      throw error;
+    }
+
+    // Définir les headers pour le téléchargement
+    const fileName = `projet-${projectUniqueId}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', fileBuffer.length);
+
+    console.log(`📦 ZIP téléchargé avec succès: ${fileName} (${fileBuffer.length} bytes)`);
+
+    // Envoyer le fichier
+    res.send(fileBuffer);
+
+  } catch (error) {
+    console.error('Error downloading project ZIP:', error);
+    res.status(500).json({
+      error: (error as Error).message,
+      code: 'DOWNLOAD_ZIP_ERROR'
     });
   }
 }; 
