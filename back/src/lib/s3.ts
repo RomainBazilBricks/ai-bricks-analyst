@@ -91,7 +91,7 @@ export async function uploadFileFromUrl(
             Key: s3Key,
             Body: buffer,
             ContentType: contentType,
-            ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+            // ACL supprimé car le bucket ne les autorise pas
             Metadata: {
               originalUrl: fileUrl,
               projectUniqueId,
@@ -131,7 +131,7 @@ export async function uploadFileFromUrl(
       Key: s3Key,
       Body: buffer,
       ContentType: contentType,
-      ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+      // ACL supprimé car le bucket ne les autorise pas
       Metadata: {
         originalUrl: fileUrl,
         projectUniqueId,
@@ -443,7 +443,7 @@ export async function createZipFromDocuments(
       Key: s3Key,
       Body: zipBuffer,
       ContentType: 'application/zip',
-      ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+      // ACL supprimé car le bucket ne les autorise pas
       Metadata: {
         projectUniqueId,
         documentCount: filteredDocuments.length.toString(),
@@ -670,7 +670,7 @@ export async function uploadExtractedFilesToS3(
         Key: s3Key,
         Body: file.buffer,
         ContentType: file.mimeType,
-        ACL: 'public-read', // Permissions publiques pour éviter AccessDenied
+        // ACL supprimé car le bucket ne les autorise pas
         Metadata: {
           projectUniqueId,
           originalFileName: file.fileName,
