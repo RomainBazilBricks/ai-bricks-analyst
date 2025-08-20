@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 import type { AnalysisStep, CreateAnalysisStepInput } from "@shared/types/projects";
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 interface EditingStep extends AnalysisStep {
   isEditing?: boolean;
@@ -32,6 +33,9 @@ interface EditingStep extends AnalysisStep {
 }
 
 export const PromptsPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Prompts');
+
   const [editingSteps, setEditingSteps] = useState<EditingStep[]>([]);
   const [savingSteps, setSavingSteps] = useState<Set<number>>(new Set());
 

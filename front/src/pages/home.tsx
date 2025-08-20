@@ -4,8 +4,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 export const HomePage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Accueil');
+
   /* Récupération de la liste des utilisateurs */
   const {
     data: users,

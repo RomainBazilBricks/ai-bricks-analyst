@@ -21,10 +21,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 const PLATFORMS: AiPlatform[] = ['chatgpt', 'claude', 'manus', 'perplexity', 'gemini', 'mistral'];
 
 export const AiCredentialsPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Credentials IA');
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCredential, setEditingCredential] = useState<AiCredential | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<AiPlatform | 'all'>('all');

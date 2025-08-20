@@ -13,8 +13,12 @@ import {
   useDeleteApiConfig
 } from '@/api/api-config';
 import { queryClient } from '@/api/query-config';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 export const ApiConfigPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Configuration API');
+
   const [pythonUrl, setPythonUrl] = useState('');
   const [newConfigName, setNewConfigName] = useState('');
   const [newConfigUrl, setNewConfigUrl] = useState('');

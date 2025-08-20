@@ -9,8 +9,12 @@ import { useNavigate } from 'react-router-dom';
 import { queryClient } from "@/api/query-config";
 import { Eye, FileText, Brain, Calendar } from "lucide-react";
 import type { CreateProjectInput } from "@shared/types/projects";
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 export const ProjectsPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Projets');
+
   // États locaux pour la création de projet
   const [projectUniqueId, setProjectUniqueId] = useState('');
   const [projectName, setProjectName] = useState('');

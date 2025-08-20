@@ -4,8 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLogin } from '@/api/auth';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 export const LoginPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Connexion');
+
   const loginStore = useAuthStore((s) => s.login);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [email, setEmail] = useState('');

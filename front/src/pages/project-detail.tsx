@@ -9,6 +9,7 @@ import { MissingDocuments } from "@/components/missing-documents";
 import { VigilancePoints } from "@/components/vigilance-points";
 import { StrengthsPoints } from "@/components/strengths-points";
 import { ProjectConversations } from "@/components/project-conversations";
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 import { useGetWorkflowStatus } from "@/api/workflow";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -78,6 +79,9 @@ export const ProjectDetailPage = () => {
     error,
     refetch
   } = useGetProjectById(projectUniqueId!, { enabled: !!projectUniqueId });
+
+  // Définir le titre de la page dynamiquement avec le nom du projet
+  useDocumentTitle(project?.projectName || 'Projet');
 
   // Hook pour récupérer les données du workflow (contient l'analyse)
   const {

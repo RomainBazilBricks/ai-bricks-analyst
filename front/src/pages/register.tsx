@@ -4,8 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useNavigate, Link } from 'react-router-dom';
 import { useRegister } from '@/api/auth';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 export const RegisterPage = () => {
+    // Définir le titre de la page
+    useDocumentTitle('Inscription');
+
     const loginStore = useAuthStore((s) => s.login);
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
     const [name, setName] = useState('');

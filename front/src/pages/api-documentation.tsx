@@ -10,6 +10,7 @@ import {
   Copy,
   CheckCircle
 } from "lucide-react";
+import { useDocumentTitle } from '@/hooks/use-document-title';
 
 interface EndpointProps {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -193,6 +194,9 @@ const manusEndpoints = [
 ];
 
 export const ApiDocumentationPage = () => {
+  // Définir le titre de la page
+  useDocumentTitle('Documentation API');
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="mb-8">
