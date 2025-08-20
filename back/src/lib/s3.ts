@@ -290,31 +290,53 @@ export function extractS3KeyFromUrlRaw(s3Url: string): string {
  * Télécharge un fichier depuis S3
  */
 async function downloadFileFromS3(s3Url: string): Promise<Buffer> {
+  let s3Response;
+  
+  // Essayer d'abord avec la clé décodée
   try {
     const s3Key = extractS3KeyFromUrl(s3Url);
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
       Key: s3Key,
     });
-
-    const response = await s3Client.send(command);
-    if (!response.Body) {
-      throw new Error('No body in S3 response');
-    }
-
-    // Convertir le stream en buffer
-    const chunks: Uint8Array[] = [];
-    const reader = response.Body as Readable;
+    s3Response = await s3Client.send(command);
+  } catch (s3Error: any) {
+    console.error(`❌ Erreur S3 avec clé décodée pour ${s3Url}:`, s3Error.name);
     
-    return new Promise((resolve, reject) => {
-      reader.on('data', (chunk) => chunks.push(chunk));
-      reader.on('error', reject);
-      reader.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-  } catch (error) {
-    console.error(`Error downloading file from S3: ${s3Url}`, error);
-    throw error;
+    if (s3Error.name === 'NoSuchKey') {
+      // Essayer avec la clé brute (non décodée)
+      try {
+        const rawS3Key = extractS3KeyFromUrlRaw(s3Url);
+        console.log(`🔄 Tentative avec clé brute: ${rawS3Key}`);
+        
+        const commandRaw = new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: rawS3Key,
+        });
+        s3Response = await s3Client.send(commandRaw);
+        console.log(`✅ Succès avec clé brute: ${rawS3Key}`);
+      } catch (rawError: any) {
+        console.error(`❌ Erreur S3 avec clé brute pour ${s3Url}:`, rawError.name);
+        throw new Error(`File not found with decoded or raw key: ${s3Url}`);
+      }
+    } else {
+      throw s3Error;
+    }
   }
+
+  if (!s3Response.Body) {
+    throw new Error('No body in S3 response');
+  }
+
+  // Convertir le stream en buffer
+  const chunks: Uint8Array[] = [];
+  const reader = s3Response.Body as Readable;
+  
+  return new Promise((resolve, reject) => {
+    reader.on('data', (chunk) => chunks.push(chunk));
+    reader.on('error', reject);
+    reader.on('end', () => resolve(Buffer.concat(chunks)));
+  });
 }
 
 /**
