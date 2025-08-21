@@ -55,9 +55,12 @@ function cleanUrl(url: string): string {
  */
 export const createProject = async (req: Request, res: Response): Promise<any> => {
   try {
-    // Nettoyer les données avant validation pour éviter les erreurs de parsing JSON
-    const cleanedBody = {
+    // Normaliser les noms de champs Bubble vers les noms standards
+    const normalizedBody = {
       ...req.body,
+      // Normaliser les champs Bubble
+      projectUniqueId: req.body.projectUniqueId || req.body.project_bubble_uniqueId,
+      fileUrls: req.body.fileUrls || req.body.filesUrls,
       // Nettoyer le champ conversations s'il existe
       conversations: req.body.conversations ? 
         String(req.body.conversations).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
@@ -70,15 +73,30 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
       fiche: req.body.fiche ? 
         String(req.body.fiche).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
         undefined,
-      // Nettoyer les URLs des fichiers
-      fileUrls: Array.isArray(req.body.fileUrls) ? 
-        req.body.fileUrls.map((url: string) => cleanUrl(String(url))) : 
-        req.body.fileUrls
     };
 
-    // Validation des données d'entrée
-    const validatedData = CreateProjectSchema.parse(cleanedBody);
-    const projectData: CreateProjectInput = validatedData;
+    // Nettoyer les URLs des fichiers
+    if (Array.isArray(normalizedBody.fileUrls)) {
+      normalizedBody.fileUrls = normalizedBody.fileUrls.map((url: string) => cleanUrl(String(url)));
+    }
+
+    // Validation des données d'entrée (utiliser le schéma flexible)
+    const validatedData = CreateProjectSchema.parse(normalizedBody);
+    
+    // Créer l'objet projectData avec les champs normalisés
+    const projectData: CreateProjectInput = {
+      projectUniqueId: validatedData.projectUniqueId || validatedData.project_bubble_uniqueId!,
+      projectName: validatedData.projectName,
+      description: validatedData.description,
+      budgetTotal: validatedData.budgetTotal,
+      estimatedRoi: validatedData.estimatedRoi,
+      startDate: validatedData.startDate,
+      fundingExpectedDate: validatedData.fundingExpectedDate,
+      fileUrls: validatedData.fileUrls || validatedData.filesUrls!,
+      conversation: validatedData.conversation,
+      conversations: validatedData.conversations,
+      fiche: validatedData.fiche,
+    };
 
     // Vérifier si le projet existe déjà
     let existingProject = await db

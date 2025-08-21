@@ -282,18 +282,31 @@ export const consolidated_data = pgTable('consolidated_data', {
 
 // Schema for POST /projects (creating project with file URLs)
 export const CreateProjectSchema = z.object({
-  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
+  // Champs Bubble (noms originaux)
+  project_bubble_uniqueId: z.string().min(1, 'ProjectUniqueId is required').optional(),
+  filesUrls: z.array(z.string().min(1, 'URL cannot be empty')).min(1, 'At least one file URL is required').optional(),
+  
+  // Champs standards (rétrocompatibilité)
+  projectUniqueId: z.string().min(1, 'ProjectUniqueId is required').optional(),
+  fileUrls: z.array(z.string().min(1, 'URL cannot be empty')).min(1, 'At least one file URL is required').optional(),
+  
+  // Champs communs
   projectName: z.string().min(1, 'ProjectName is required'),
   description: z.string().optional().default(''), // Optionnel avec valeur par défaut
   budgetTotal: z.number().optional().default(0), // Optionnel avec valeur par défaut
   estimatedRoi: z.number().optional().default(0), // Optionnel avec valeur par défaut
   startDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
   fundingExpectedDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
-  fileUrls: z.array(z.string().min(1, 'URL cannot be empty')).min(1, 'At least one file URL is required'), // Plus tolérant pour les URLs
   conversation: z.string().optional(), // Historique des conversations avec le porteur de projet
   conversations: z.string().optional(), // Alias pour conversation (compatibilité Bubble)
   fiche: z.string().optional(), // Fiche de présentation du projet par le porteur
-});
+}).refine(
+  (data) => data.projectUniqueId || data.project_bubble_uniqueId,
+  { message: "Either projectUniqueId or project_bubble_uniqueId is required" }
+).refine(
+  (data) => data.fileUrls || data.filesUrls,
+  { message: "Either fileUrls or filesUrls is required" }
+);
 
 // Schema for POST /sessions
 export const CreateSessionSchema = z.object({
