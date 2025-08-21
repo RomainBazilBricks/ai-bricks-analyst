@@ -2037,7 +2037,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 60000, // 60 secondes pour l'upload du ZIP
+        timeout: 600000, // 10 minutes pour l'upload du ZIP (gros fichiers)
       });
     } catch (axiosError: any) {
       console.error(`❌ Erreur lors de l'appel à l'API Python:`, axiosError.message);
