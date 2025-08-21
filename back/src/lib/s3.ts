@@ -558,7 +558,11 @@ export async function createZipFromDocuments(
   let failureCount = 0;
   const failedDocuments: string[] = [];
 
-  // Ajouter chaque document au ZIP
+  // Ajouter chaque document au ZIP (en excluant ceux > 20MB)
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+  let skippedLargeFiles = 0;
+  const skippedFiles: string[] = [];
+  
   for (const doc of filteredDocuments) {
     try {
       console.log(`📄 Tentative d'ajout du document: ${doc.fileName}`);
@@ -566,12 +570,23 @@ export async function createZipFromDocuments(
       
       const fileBuffer = await downloadFileFromS3(doc.url);
       
+      // Vérifier la taille du fichier
+      const fileSizeMB = (fileBuffer.length / 1024 / 1024).toFixed(2);
+      
+      if (fileBuffer.length > MAX_FILE_SIZE) {
+        // Fichier trop volumineux, l'exclure du ZIP
+        skippedLargeFiles++;
+        skippedFiles.push(doc.fileName);
+        console.log(`⚠️ Fichier exclu du ZIP (trop volumineux): ${doc.fileName} (${fileSizeMB}MB > 20MB)`);
+        continue; // Passer au fichier suivant
+      }
+      
       // Nettoyer le nom de fichier pour éviter les problèmes de chemin
       const cleanFileName = doc.fileName.replace(/[<>:"/\\|?*]/g, '_');
       archive.append(fileBuffer, { name: cleanFileName });
       
       successCount++;
-      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${successCount}/${filteredDocuments.length})`);
+      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${fileSizeMB}MB) (${successCount}/${filteredDocuments.length - skippedLargeFiles})`);
     } catch (error) {
       failureCount++;
       failedDocuments.push(doc.fileName);
@@ -583,8 +598,12 @@ export async function createZipFromDocuments(
   console.log(`📊 Résumé de l'ajout des documents:`);
   console.log(`   ✅ Succès: ${successCount}/${filteredDocuments.length}`);
   console.log(`   ❌ Échecs: ${failureCount}/${filteredDocuments.length}`);
+  console.log(`   ⚠️ Exclus (> 20MB): ${skippedLargeFiles}/${filteredDocuments.length}`);
   if (failedDocuments.length > 0) {
     console.log(`   📋 Documents échoués: ${failedDocuments.join(', ')}`);
+  }
+  if (skippedFiles.length > 0) {
+    console.log(`   📋 Documents exclus: ${skippedFiles.join(', ')}`);
   }
 
     // Ajouter les fichiers conversation.txt et fiche.txt si les données sont disponibles et non vides

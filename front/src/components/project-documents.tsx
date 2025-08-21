@@ -433,10 +433,17 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
         )}
         
         <div className="space-y-4">
-          {documents.map((document: DocumentResponse) => (
+          {documents.map((document: DocumentResponse) => {
+            const isLargeFile = document.size > 20 * 1024 * 1024; // > 20MB
+            
+            return (
             <div 
               key={document.id} 
-              className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+              className={`border rounded-lg p-4 transition-colors ${
+                isLargeFile 
+                  ? 'border-red-300 bg-red-50 hover:bg-red-100' 
+                  : 'border-gray-200 hover:bg-gray-50'
+              }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -542,8 +549,22 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
                   )}
                 </div>
               </div>
+              
+              {/* Disclaimer pour les fichiers trop volumineux */}
+              {isLargeFile && (
+                <div className="mt-3 p-3 bg-red-100 border border-red-200 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm text-red-800">
+                      <strong>Fichier trop volumineux :</strong> Ce document ne sera pas inclus dans l'analyse car il dépasse 20MB. 
+                      Veuillez le compresser ou le diviser en plusieurs fichiers plus petits.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Modal de confirmation pour supprimer tous les documents */}
