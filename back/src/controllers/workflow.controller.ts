@@ -2031,6 +2031,17 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     console.log(`📄 Payload JSON complet:`);
     console.log(JSON.stringify(payload, null, 2));
 
+    // IMPORTANT: Sauvegarder l'URL du ZIP en base AVANT d'envoyer à l'API Python
+    // Sinon l'endpoint proxy retourne 404 car zipUrl n'existe pas encore
+    console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet AVANT envoi API Python: ${zipResult.s3Url}`);
+    await db
+      .update(projects)
+      .set({
+        zipUrl: zipResult.s3Url,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project[0].id));
+
     let response;
     try {
       response = await axios.post(`${pythonApiUrl}/upload-zip-from-url`, payload, {
@@ -2146,15 +2157,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       // Ne pas faire échouer le workflow pour cette erreur
     }
 
-    // Sauvegarder l'URL du ZIP dans la table projects
-    console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet: ${zipResult.s3Url}`);
-    await db
-      .update(projects)
-      .set({
-        zipUrl: zipResult.s3Url,
-        updatedAt: new Date(),
-      })
-      .where(eq(projects.id, project[0].id));
+    // Note: zipUrl déjà sauvegardé en base avant l'appel API Python
 
     // Note: Pas de déclenchement automatique de l'étape suivante
     // C'est Manus qui déclenchera les étapes suivantes via les endpoints dédiés
