@@ -156,26 +156,30 @@ export async function uploadFileFromUrl(
     console.log(`  - finalFileName: ${finalFileName}`);
     console.log(`  - taille originale: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
     
-    // Compression automatique si le fichier dépasse 10MB
-    const compressionResult = await compressFileIfNeeded(buffer, finalFileName, contentType);
-    buffer = compressionResult.buffer;
-    finalFileName = compressionResult.fileName;
-    contentType = compressionResult.mimeType;
-    
-    if (compressionResult.compressed) {
-      console.log(`🗜️ Fichier compressé: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
-    }
-    
-    // Calculer le hash du fichier (après compression) pour détecter les doublons
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
-    
-    // Vérifier si c'est un fichier ZIP
+    // 🔍 IMPORTANT: Détecter les ZIP AVANT la compression !
     const isZipFile = contentType === 'application/zip' || 
                      finalFileName.toLowerCase().endsWith('.zip') ||
                      contentType === 'application/x-zip-compressed';
     
+    // Compression automatique seulement pour les fichiers NON-ZIP
+    if (!isZipFile) {
+      const compressionResult = await compressFileIfNeeded(buffer, finalFileName, contentType);
+      buffer = compressionResult.buffer;
+      finalFileName = compressionResult.fileName;
+      contentType = compressionResult.mimeType;
+      
+      if (compressionResult.compressed) {
+        console.log(`🗜️ Fichier compressé: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+      }
+    } else {
+      console.log(`📦 ZIP détecté: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) - Pas de compression, dézippage à venir`);
+    }
+    
+    // Calculer le hash du fichier (après compression éventuelle) pour détecter les doublons
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    
     if (isZipFile) {
-      console.log(`📦 Fichier ZIP détecté: ${finalFileName}, début du dézippage...`);
+      console.log(`📦 Fichier ZIP détecté: ${finalFileName}, dézippage automatique (ZIP non stocké)...`);
       
       try {
         // Dézipper le fichier et extraire les fichiers (en filtrant les images)
