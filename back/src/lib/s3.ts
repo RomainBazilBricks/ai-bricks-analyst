@@ -6,6 +6,8 @@ import archiver from 'archiver';
 import { Readable } from 'stream';
 import yauzl from 'yauzl';
 import { promisify } from 'util';
+import sharp from 'sharp';
+import { gzip } from 'zlib';
 
 dotenv.config();
 
@@ -19,6 +21,101 @@ export const s3Client = new S3Client({
 });
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME!;
+
+/**
+ * Compresse un fichier si sa taille dépasse 10MB
+ * @param buffer - Buffer du fichier original
+ * @param fileName - Nom du fichier
+ * @param mimeType - Type MIME du fichier
+ * @returns Buffer compressé et nouveau nom de fichier si compression appliquée
+ */
+async function compressFileIfNeeded(
+  buffer: Buffer, 
+  fileName: string, 
+  mimeType: string
+): Promise<{ buffer: Buffer; fileName: string; mimeType: string; compressed: boolean }> {
+  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+  
+  if (buffer.length <= MAX_SIZE) {
+    console.log(`📏 Fichier ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) - Pas de compression nécessaire`);
+    return { buffer, fileName, mimeType, compressed: false };
+  }
+
+  console.log(`🗜️ Fichier ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) > 10MB - Compression en cours...`);
+
+  try {
+    let compressedBuffer: Buffer;
+    let newFileName = fileName;
+    let newMimeType = mimeType;
+
+    // Compression spécifique selon le type de fichier
+    if (mimeType.startsWith('image/')) {
+      // Compression d'image avec Sharp
+      console.log(`🖼️ Compression d'image: ${fileName}`);
+      
+      // Calculer la qualité nécessaire pour atteindre ~8MB (marge de sécurité)
+      const targetSize = 8 * 1024 * 1024;
+      let quality = Math.floor((targetSize / buffer.length) * 100);
+      quality = Math.max(10, Math.min(90, quality)); // Entre 10% et 90%
+      
+      compressedBuffer = await sharp(buffer)
+        .jpeg({ quality, progressive: true })
+        .toBuffer();
+      
+      // Si toujours trop gros, redimensionner
+      if (compressedBuffer.length > MAX_SIZE) {
+        const scaleFactor = Math.sqrt(targetSize / compressedBuffer.length);
+        const metadata = await sharp(buffer).metadata();
+        const newWidth = Math.floor((metadata.width || 1920) * scaleFactor);
+        
+        compressedBuffer = await sharp(buffer)
+          .resize(newWidth)
+          .jpeg({ quality: 80, progressive: true })
+          .toBuffer();
+      }
+      
+      newFileName = fileName.replace(/\.[^.]+$/, '.jpg');
+      newMimeType = 'image/jpeg';
+      
+    } else if (mimeType === 'application/pdf') {
+      // Pour les PDF, on utilise gzip (compression générique)
+      console.log(`📄 Compression PDF (gzip): ${fileName}`);
+      const gzipAsync = promisify(gzip);
+      compressedBuffer = await gzipAsync(buffer);
+      newFileName = fileName + '.gz';
+      newMimeType = 'application/gzip';
+      
+    } else {
+      // Compression générique avec gzip pour autres types
+      console.log(`📦 Compression générique (gzip): ${fileName}`);
+      const gzipAsync = promisify(gzip);
+      compressedBuffer = await gzipAsync(buffer);
+      newFileName = fileName + '.gz';
+      newMimeType = 'application/gzip';
+    }
+
+    const compressionRatio = ((buffer.length - compressedBuffer.length) / buffer.length * 100).toFixed(1);
+    const finalSizeMB = (compressedBuffer.length / 1024 / 1024).toFixed(2);
+    
+    console.log(`✅ Compression réussie: ${fileName}`);
+    console.log(`   - Taille originale: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`   - Taille compressée: ${finalSizeMB}MB`);
+    console.log(`   - Ratio de compression: ${compressionRatio}%`);
+    console.log(`   - Nouveau nom: ${newFileName}`);
+
+    return {
+      buffer: compressedBuffer,
+      fileName: newFileName,
+      mimeType: newMimeType,
+      compressed: true
+    };
+
+  } catch (error) {
+    console.error(`❌ Erreur lors de la compression de ${fileName}:`, error);
+    console.log(`⚠️ Utilisation du fichier original sans compression`);
+    return { buffer, fileName, mimeType, compressed: false };
+  }
+}
 
 /**
  * Télécharge un fichier depuis une URL et l'upload vers S3
@@ -43,13 +140,13 @@ export async function uploadFileFromUrl(
       throw new Error(`Failed to fetch file from ${fileUrl}: ${response.statusText}`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    let buffer = Buffer.from(await response.arrayBuffer());
+    let contentType = response.headers.get('content-type') || 'application/octet-stream';
     
     // Générer le nom de fichier s'il n'est pas fourni
     const extractedFileName = extractFileNameFromUrl(fileUrl);
     const headerFileName = extractFileNameFromHeaders(response.headers);
-    const finalFileName = fileName || extractedFileName || headerFileName || `document-${Date.now()}`;
+    let finalFileName = fileName || extractedFileName || headerFileName || `document-${Date.now()}`;
     
     console.log(`🔍 DEBUG uploadFileFromUrl:`);
     console.log(`  - fileUrl: ${fileUrl}`);
@@ -57,8 +154,19 @@ export async function uploadFileFromUrl(
     console.log(`  - extractedFileName: ${extractedFileName}`);
     console.log(`  - headerFileName: ${headerFileName}`);
     console.log(`  - finalFileName: ${finalFileName}`);
+    console.log(`  - taille originale: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
     
-    // Calculer le hash du fichier pour détecter les doublons
+    // Compression automatique si le fichier dépasse 10MB
+    const compressionResult = await compressFileIfNeeded(buffer, finalFileName, contentType);
+    buffer = compressionResult.buffer;
+    finalFileName = compressionResult.fileName;
+    contentType = compressionResult.mimeType;
+    
+    if (compressionResult.compressed) {
+      console.log(`🗜️ Fichier compressé: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+    }
+    
+    // Calculer le hash du fichier (après compression) pour détecter les doublons
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     
     // Vérifier si c'est un fichier ZIP
@@ -77,41 +185,19 @@ export async function uploadFileFromUrl(
           console.log(`⚠️ Aucun fichier valide trouvé dans le ZIP ${finalFileName}`);
           // Traiter comme un fichier normal si aucun fichier extrait
         } else {
-          // Upload les fichiers extraits vers S3
+          // Upload les fichiers extraits vers S3 avec déduplication
           const uploadResults = await uploadExtractedFilesToS3(extractedFiles, projectUniqueId);
           
-          console.log(`✅ ZIP traité: ${uploadResults.length} fichiers extraits et uploadés`);
+          console.log(`✅ ZIP dézippé: ${uploadResults.length} fichiers extraits et uploadés (ZIP original non stocké)`);
           
-          // Créer la clé S3 pour le ZIP original (optionnel, pour garder une trace)
-          const s3Key = `projects/${projectUniqueId}/zips/${hash}-${finalFileName}`;
-          
-          // Upload le ZIP original vers S3 pour référence
-          const putCommand = new PutObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: s3Key,
-            Body: buffer,
-            ContentType: contentType,
-            // ACL supprimé car le bucket ne les autorise pas
-            Metadata: {
-              originalUrl: fileUrl,
-              projectUniqueId,
-              isZipFile: 'true',
-              extractedFilesCount: extractedFiles.length.toString(),
-              uploadedAt: new Date().toISOString(),
-            },
-          });
-
-          await s3Client.send(putCommand);
-          
-          // Générer l'URL S3 du ZIP original
-          const s3Url = `https://${BUCKET_NAME}.s3.${process.env.AWS_S3_REGION || 'eu-north-1'}.amazonaws.com/${s3Key}`;
-          
+          // ⚠️ IMPORTANT: Ne pas stocker le ZIP original, retourner seulement les fichiers extraits
+          // On retourne un objet factice pour maintenir la compatibilité de l'API
           return {
-            s3Url,
-            fileName: finalFileName,
-            hash,
-            mimeType: contentType,
-            size: buffer.length,
+            s3Url: '', // Pas d'URL car le ZIP n'est pas stocké
+            fileName: `${finalFileName} (dézippé)`,
+            hash: 'zip-extracted',
+            mimeType: 'application/zip-extracted',
+            size: 0, // Taille 0 car le ZIP n'est pas stocké
             extractedFiles: uploadResults,
           };
         }
@@ -669,7 +755,8 @@ export async function unzipFile(
  */
 export async function uploadExtractedFilesToS3(
   extractedFiles: Array<{ fileName: string; buffer: Buffer; mimeType: string }>,
-  projectUniqueId: string
+  projectUniqueId: string,
+  existingFiles?: Array<{ fileName: string; hash: string }> // Pour la déduplication
 ): Promise<Array<{ s3Url: string; fileName: string; hash: string; mimeType: string; size: number }>> {
   const uploadResults: Array<{ s3Url: string; fileName: string; hash: string; mimeType: string; size: number }> = [];
   
@@ -682,6 +769,19 @@ export async function uploadExtractedFilesToS3(
       
       // Nettoyer le nom de fichier
       const cleanFileName = file.fileName.replace(/[<>:"/\\|?*]/g, '_');
+      
+      // 🔍 DÉDUPLICATION: Vérifier si ce fichier existe déjà (par hash ET nom)
+      if (existingFiles) {
+        const isDuplicateByHash = existingFiles.some(existing => existing.hash === hash);
+        const isDuplicateByName = existingFiles.some(existing => existing.fileName === cleanFileName);
+        
+        if (isDuplicateByHash || isDuplicateByName) {
+          console.log(`⚠️ Fichier dupliqué ignoré: ${cleanFileName}`);
+          console.log(`   - Dupliqué par hash: ${isDuplicateByHash ? 'OUI' : 'NON'}`);
+          console.log(`   - Dupliqué par nom: ${isDuplicateByName ? 'OUI' : 'NON'}`);
+          continue; // Passer au fichier suivant
+        }
+      }
       
       // Créer la clé S3
       const s3Key = `projects/${projectUniqueId}/${hash}-${cleanFileName}`;

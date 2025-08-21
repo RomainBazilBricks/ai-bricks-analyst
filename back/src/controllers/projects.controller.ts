@@ -178,27 +178,16 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
           
           // Si c'est un ZIP avec des fichiers extraits, traiter chaque fichier extrait
           if (s3Result.extractedFiles && s3Result.extractedFiles.length > 0) {
-            console.log(`📦 ZIP détecté avec ${s3Result.extractedFiles.length} fichiers extraits`);
+            console.log(`📦 ZIP dézippé avec ${s3Result.extractedFiles.length} fichiers extraits (ZIP original non stocké)`);
             
-            // Ajouter le ZIP original comme document de référence
-            if (!existingFileNames.has(s3Result.fileName)) {
-              documentsToInsert.push({
-                sessionId: newSession[0].id,
-                fileName: s3Result.fileName,
-                url: s3Result.s3Url,
-                hash: s3Result.hash,
-                mimeType: s3Result.mimeType,
-                size: s3Result.size,
-                status: 'PROCESSED' as const,
-                uploadedAt: new Date(),
-              });
-              existingFileNames.add(s3Result.fileName);
-              console.log(`✅ ZIP original ajouté: ${s3Result.fileName}`);
-            }
+            // ⚠️ Ne plus stocker le ZIP original, seulement les fichiers extraits
             
-            // Ajouter chaque fichier extrait
+            // Ajouter chaque fichier extrait avec déduplication par hash ET nom
             for (const extractedFile of s3Result.extractedFiles) {
-              if (!existingFileNames.has(extractedFile.fileName)) {
+              const isDuplicateByName = existingFileNames.has(extractedFile.fileName);
+              const isDuplicateByHash = existingHashes.has(extractedFile.hash);
+              
+              if (!isDuplicateByName && !isDuplicateByHash) {
                 documentsToInsert.push({
                   sessionId: newSession[0].id,
                   fileName: extractedFile.fileName,
@@ -210,16 +199,24 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
                   uploadedAt: new Date(),
                 });
                 existingFileNames.add(extractedFile.fileName);
+                existingHashes.add(extractedFile.hash);
                 console.log(`✅ Fichier extrait ajouté: ${extractedFile.fileName}`);
               } else {
-                console.log(`⚠️ Fichier extrait ignoré (déjà existant): ${extractedFile.fileName}`);
+                console.log(`⚠️ Fichier extrait ignoré (dupliqué): ${extractedFile.fileName}`);
+                console.log(`   - Dupliqué par nom: ${isDuplicateByName ? 'OUI' : 'NON'}`);
+                console.log(`   - Dupliqué par hash: ${isDuplicateByHash ? 'OUI' : 'NON'}`);
               }
             }
           } else {
             // Traitement normal pour les fichiers non-ZIP
-            // Vérifier si ce document existe déjà (par nom de fichier)
-            if (existingFileNames.has(s3Result.fileName)) {
-              console.log(`⚠️ Document ${index + 1} ignoré (déjà existant): ${s3Result.fileName}`);
+            // Vérifier si ce document existe déjà (par nom ET hash)
+            const isDuplicateByName = existingFileNames.has(s3Result.fileName);
+            const isDuplicateByHash = existingHashes.has(s3Result.hash);
+            
+            if (isDuplicateByName || isDuplicateByHash) {
+              console.log(`⚠️ Document ${index + 1} ignoré (dupliqué): ${s3Result.fileName}`);
+              console.log(`   - Dupliqué par nom: ${isDuplicateByName ? 'OUI' : 'NON'}`);
+              console.log(`   - Dupliqué par hash: ${isDuplicateByHash ? 'OUI' : 'NON'}`);
               continue;
             }
             
@@ -234,8 +231,9 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
               uploadedAt: new Date(),
             });
             
-            // Ajouter le nom de fichier à notre set pour éviter les doublons dans cette même requête
+            // Ajouter le nom de fichier ET hash à nos sets pour éviter les doublons dans cette même requête
             existingFileNames.add(s3Result.fileName);
+            existingHashes.add(s3Result.hash);
             
             console.log(`✅ Document ${index + 1} converti vers S3: ${s3Result.s3Url}`);
           }
@@ -1829,6 +1827,8 @@ export const downloadProjectZip = async (req: Request, res: Response): Promise<a
     }
 
     console.log(`📦 Téléchargement ZIP depuis: ${project[0].zipUrl}`);
+    console.log(`🔍 DEBUG: URL ZIP en base pour projet ${projectUniqueId}: ${project[0].zipUrl}`);
+    console.log(`🔍 DEBUG: Taille attendue si URL récente: ~113MB, si ancienne URL: ~180MB`);
 
     // Télécharger le fichier depuis S3
     let fileBuffer: Buffer;

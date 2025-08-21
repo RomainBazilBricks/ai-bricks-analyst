@@ -1871,7 +1871,12 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
   try {
     const { projectUniqueId } = req.body;
 
+    console.log(`🚀🚀🚀 DEBUT uploadZipFromUrl - Fonction appelée !`);
+    console.log(`📋 req.body complet:`, JSON.stringify(req.body, null, 2));
+    console.log(`🔍 projectUniqueId extrait: ${projectUniqueId}`);
+
     if (!projectUniqueId) {
+      console.log(`❌ ProjectUniqueId manquant dans req.body`);
       return res.status(400).json({
         error: 'ProjectUniqueId est requis',
         code: 'MISSING_PROJECT_UNIQUE_ID'
@@ -1899,59 +1904,111 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     console.log(`✅ Projet trouvé: ${project[0].projectName} (ID: ${project[0].id})`);
 
-    // Récupérer tous les documents du projet via les sessions
-    console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
+    // Vérifier si un ZIP existe déjà pour ce projet
+    let zipS3Url = project[0].zipUrl;
+    let zipFileName = '';
+    let zipSize = 0;
+    let zipHash = '';
+    let projectDocuments: any[] = []; // Initialiser pour éviter les erreurs
     
-    // D'abord, voir tous les documents (peu importe le statut)
-    const allDocuments = await db
-      .select({
-        fileName: documents.fileName,
-        url: documents.url,
-        status: documents.status,
-        sessionId: documents.sessionId,
-      })
-      .from(documents)
-      .innerJoin(sessions, eq(documents.sessionId, sessions.id))
-      .where(eq(sessions.projectId, project[0].id));
-    
-    console.log(`📊 Tous les documents du projet (${allDocuments.length} total):`);
-    allDocuments.forEach((doc, index) => {
-      console.log(`   ${index + 1}. ${doc.fileName} - Status: ${doc.status} - URL: ${doc.url}`);
-    });
-    
-    // Maintenant, filtrer seulement les PROCESSED
-    const projectDocuments = allDocuments.filter(doc => doc.status === 'PROCESSED');
-    console.log(`📄 Documents avec statut PROCESSED: ${projectDocuments.length}/${allDocuments.length}`);
-
-    if (projectDocuments.length === 0) {
-      console.log(`❌ Aucun document trouvé pour le projet ${projectUniqueId}`);
-      return res.status(400).json({
-        error: 'Aucun document trouvé pour ce projet',
-        code: 'NO_DOCUMENTS_FOUND'
+    if (zipS3Url) {
+      console.log(`♻️ ZIP existant trouvé pour le projet: ${zipS3Url}`);
+      console.log(`🚀 Réutilisation du ZIP existant au lieu d'en créer un nouveau`);
+      
+      // Extraire le nom du fichier de l'URL S3
+      zipFileName = zipS3Url.split('/').pop() || 'existing-zip.zip';
+      zipSize = 0; // Taille inconnue pour un ZIP existant
+      zipHash = 'existing';
+      
+      // Pour un ZIP existant, on ne connaît pas le nombre exact de documents
+      // On peut essayer de le récupérer ou utiliser une valeur par défaut
+      console.log(`📄 Récupération du nombre de documents pour le ZIP existant...`);
+      const allDocuments = await db
+        .select({
+          fileName: documents.fileName,
+          url: documents.url,
+          status: documents.status,
+          sessionId: documents.sessionId,
+        })
+        .from(documents)
+        .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+        .where(eq(sessions.projectId, project[0].id));
+      
+      projectDocuments = allDocuments.filter(doc => doc.status === 'PROCESSED');
+      console.log(`📄 ${projectDocuments.length} documents PROCESSED trouvés pour le projet existant`);
+    } else {
+      console.log(`📦 Aucun ZIP existant trouvé, création d'un nouveau ZIP...`);
+      
+      // Récupérer tous les documents du projet via les sessions
+      console.log(`🔍 Recherche des documents pour le projet ${project[0].id}...`);
+      
+      // D'abord, voir tous les documents (peu importe le statut)
+      const allDocuments = await db
+        .select({
+          fileName: documents.fileName,
+          url: documents.url,
+          status: documents.status,
+          sessionId: documents.sessionId,
+        })
+        .from(documents)
+        .innerJoin(sessions, eq(documents.sessionId, sessions.id))
+        .where(eq(sessions.projectId, project[0].id));
+      
+      console.log(`📊 Tous les documents du projet (${allDocuments.length} total):`);
+      allDocuments.forEach((doc, index) => {
+        console.log(`   ${index + 1}. ${doc.fileName} - Status: ${doc.status} - URL: ${doc.url}`);
       });
+      
+      // Maintenant, filtrer seulement les PROCESSED
+      projectDocuments = allDocuments.filter(doc => doc.status === 'PROCESSED');
+      console.log(`📄 Documents avec statut PROCESSED: ${projectDocuments.length}/${allDocuments.length}`);
+
+      if (projectDocuments.length === 0) {
+        console.log(`❌ Aucun document trouvé pour le projet ${projectUniqueId}`);
+        return res.status(400).json({
+          error: 'Aucun document trouvé pour ce projet',
+          code: 'NO_DOCUMENTS_FOUND'
+        });
+      }
+
+      console.log(`📄 ${projectDocuments.length} documents trouvés pour le projet ${projectUniqueId}`);
+      projectDocuments.forEach((doc, index) => {
+        console.log(`   ${index + 1}. ${doc.fileName} - ${doc.url}`);
+      });
+
+      // Créer le ZIP et l'uploader vers S3
+      console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
+      
+      // Préparer les données du projet pour inclure conversation.txt et fiche.txt
+      const projectData = {
+        conversation: project[0].conversation || undefined,
+        fiche: project[0].fiche || undefined
+      };
+      
+      const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId, projectData);
+      console.log(`✅ ZIP créé avec succès:`, {
+        fileName: zipResult.fileName,
+        s3Url: zipResult.s3Url,
+        size: zipResult.size,
+        hash: zipResult.hash
+      });
+
+      // Sauvegarder l'URL du ZIP dans le projet pour la prochaine fois
+      zipS3Url = zipResult.s3Url;
+      zipFileName = zipResult.fileName;
+      zipSize = zipResult.size;
+      zipHash = zipResult.hash;
+      
+      await db
+        .update(projects)
+        .set({ zipUrl: zipS3Url })
+        .where(eq(projects.projectUniqueId, projectUniqueId));
+      
+      console.log(`💾 URL du ZIP sauvegardée dans le projet: ${zipS3Url}`);
     }
 
-    console.log(`📄 ${projectDocuments.length} documents trouvés pour le projet ${projectUniqueId}`);
-    projectDocuments.forEach((doc, index) => {
-      console.log(`   ${index + 1}. ${doc.fileName} - ${doc.url}`);
-    });
-
-    // Créer le ZIP et l'uploader vers S3
-    console.log(`📦 Création du ZIP à partir de ${projectDocuments.length} documents...`);
-    
-    // Préparer les données du projet pour inclure conversation.txt et fiche.txt
-    const projectData = {
-      conversation: project[0].conversation || undefined,
-      fiche: project[0].fiche || undefined
-    };
-    
-    const zipResult = await createZipFromDocuments(projectDocuments, projectUniqueId, projectData);
-    console.log(`✅ ZIP créé avec succès:`, {
-      fileName: zipResult.fileName,
-      s3Url: zipResult.s3Url,
-      size: zipResult.size,
-      hash: zipResult.hash
-    });
+    console.log(`🔥 DEBUG: ZIP S3 URL à utiliser = ${zipS3Url}`);
+    console.log(`🔥 DEBUG: Continuons vers récupération étape 0...`);
 
     // Récupérer le prompt de l'étape 0 (Upload des documents)
     console.log(`🔍 Recherche de l'étape 0 dans analysis_steps...`);
@@ -2003,10 +2060,13 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
 
     console.log(`📦 Payload préparé pour l'API Python:`);
     console.log(`   - zip_url: ${payload.zip_url}`);
+    console.log(`   - zip_url présent: ${!!payload.zip_url}`);
+    console.log(`   - zip_url longueur: ${payload.zip_url ? payload.zip_url.length : 'N/A'}`);
     console.log(`   - platform: ${payload.platform}`);
     console.log(`   - projectUniqueId: ${payload.projectUniqueId}`);
     console.log(`   - message (premiers 200 chars): ${payload.message.substring(0, 200)}...`);
     console.log(`   - taille complète du message: ${payload.message.length} caractères`);
+    console.log(`🔍 VERIFICATION PAYLOAD COMPLET:`, JSON.stringify(payload, null, 2));
 
     // Récupérer la configuration API Python
     let pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL;
@@ -2031,19 +2091,15 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     console.log(`📄 Payload JSON complet:`);
     console.log(JSON.stringify(payload, null, 2));
 
-    // IMPORTANT: Sauvegarder l'URL du ZIP en base AVANT d'envoyer à l'API Python
-    // Sinon l'endpoint proxy retourne 404 car zipUrl n'existe pas encore
-    console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet AVANT envoi API Python: ${zipResult.s3Url}`);
-    await db
-      .update(projects)
-      .set({
-        zipUrl: zipResult.s3Url,
-        updatedAt: new Date(),
-      })
-      .where(eq(projects.id, project[0].id));
+    // L'URL du ZIP est déjà sauvegardée dans zipS3Url (soit existante, soit nouvellement créée)
 
     let response;
     try {
+      console.log(`🔥 JUSTE AVANT APPEL API PYTHON:`);
+      console.log(`   - URL: ${pythonApiUrl}/upload-zip-from-url`);
+      console.log(`   - Payload zip_url: ${payload.zip_url}`);
+      console.log(`   - Payload complet:`, JSON.stringify(payload, null, 2));
+      
       response = await axios.post(`${pythonApiUrl}/upload-zip-from-url`, payload, {
         headers: {
           'Content-Type': 'application/json',
@@ -2108,7 +2164,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
       .update(project_analysis_progress)
       .set({
         status: 'completed',
-        content: `ZIP uploadé: ${zipResult.fileName} (${zipResult.size} bytes)`,
+        content: `ZIP uploadé: ${zipFileName} (${zipSize} bytes)`,
         manusConversationUrl: conversationUrl,
         completedAt: new Date(),
         updatedAt: new Date(),
@@ -2167,12 +2223,12 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     console.log(`🔗 URL conversation: ${conversationUrl}`);
 
     res.status(200).json({
-      message: 'ZIP créé et envoyé avec succès à Manus',
+      message: 'ZIP envoyé avec succès à Manus',
       projectUniqueId,
-      zipUrl: zipResult.s3Url,
-      zipFileName: zipResult.fileName,
-      zipSize: zipResult.size,
-      documentCount: projectDocuments.length,
+      zipUrl: zipS3Url,
+      zipFileName: zipFileName,
+      zipSize: zipSize,
+      documentCount: zipS3Url === project[0].zipUrl ? 'réutilisé' : 'nouveau',
       conversationUrl,
       nextStepTriggered: triggerResult.success
     });
@@ -2290,14 +2346,6 @@ export const generateZipOnly = async (req: Request, res: Response): Promise<any>
       hash: zipResult.hash
     });
 
-    // Vérifier si le ZIP semble anormalement petit (probablement des fichiers manquants)
-    const expectedMinSize = projectDocuments.length * 10000; // ~10KB par document minimum
-    if (zipResult.size < expectedMinSize && projectDocuments.length > 2) {
-      console.warn(`⚠️ ZIP suspicieusement petit: ${zipResult.size} bytes pour ${projectDocuments.length} documents`);
-      console.warn(`⚠️ Taille attendue minimum: ${expectedMinSize} bytes`);
-      console.warn(`⚠️ Possible problème: fichiers manquants sur S3`);
-    }
-
     // Sauvegarder l'URL du ZIP dans la table projects
     console.log(`💾 Sauvegarde de l'URL du ZIP dans le projet: ${zipResult.s3Url}`);
     await db
@@ -2306,7 +2354,7 @@ export const generateZipOnly = async (req: Request, res: Response): Promise<any>
         zipUrl: zipResult.s3Url,
         updatedAt: new Date(),
       })
-      .where(eq(projects.id, project[0].id));
+      .where(eq(projects.projectUniqueId, projectUniqueId));
 
     console.log(`✅ ZIP généré avec succès pour le projet: ${projectUniqueId}`);
 
