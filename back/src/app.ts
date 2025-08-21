@@ -24,6 +24,32 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Middleware JSON custom qui nettoie les caractères de contrôle
+app.use('/api/projects', express.raw({ type: 'application/json' }), (req, res, next) => {
+  if (req.method === 'POST' && req.body) {
+    try {
+      // Convertir le buffer en string et nettoyer les caractères de contrôle
+      let jsonString = req.body.toString('utf8');
+      
+      // Nettoyer les caractères de contrôle problématiques mais garder les sauts de ligne légitimes
+      jsonString = jsonString.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+      
+      // Parser le JSON nettoyé
+      req.body = JSON.parse(jsonString);
+      console.log('✅ JSON nettoyé et parsé avec succès');
+    } catch (error) {
+      console.error('❌ Erreur parsing JSON même après nettoyage:', error);
+      return res.status(400).json({
+        error: 'Format JSON invalide',
+        details: (error as Error).message,
+        code: 'JSON_PARSE_ERROR'
+      });
+    }
+  }
+  next();
+});
+
+// Parser JSON standard pour les autres routes
 app.use(express.json());
 
 // Servir les fichiers statiques du frontend en production
