@@ -289,7 +289,7 @@ export const CreateProjectSchema = z.object({
   estimatedRoi: z.number().optional().default(0), // Optionnel avec valeur par défaut
   startDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
   fundingExpectedDate: z.string().optional().default(new Date().toISOString()), // Optionnel, défaut à aujourd'hui
-  fileUrls: z.array(z.string().url('Must be valid URLs')).min(1, 'At least one file URL is required'),
+  fileUrls: z.array(z.string().min(1, 'URL cannot be empty')).min(1, 'At least one file URL is required'), // Plus tolérant pour les URLs
   conversation: z.string().optional(), // Historique des conversations avec le porteur de projet
   conversations: z.string().optional(), // Alias pour conversation (compatibilité Bubble)
   fiche: z.string().optional(), // Fiche de présentation du projet par le porteur

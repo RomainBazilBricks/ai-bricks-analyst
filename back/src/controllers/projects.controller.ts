@@ -55,8 +55,29 @@ function cleanUrl(url: string): string {
  */
 export const createProject = async (req: Request, res: Response): Promise<any> => {
   try {
+    // Nettoyer les données avant validation pour éviter les erreurs de parsing JSON
+    const cleanedBody = {
+      ...req.body,
+      // Nettoyer le champ conversations s'il existe
+      conversations: req.body.conversations ? 
+        String(req.body.conversations).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
+        undefined,
+      // Nettoyer le champ conversation s'il existe  
+      conversation: req.body.conversation ? 
+        String(req.body.conversation).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
+        undefined,
+      // Nettoyer le champ fiche s'il existe
+      fiche: req.body.fiche ? 
+        String(req.body.fiche).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
+        undefined,
+      // Nettoyer les URLs des fichiers
+      fileUrls: Array.isArray(req.body.fileUrls) ? 
+        req.body.fileUrls.map((url: string) => cleanUrl(String(url))) : 
+        req.body.fileUrls
+    };
+
     // Validation des données d'entrée
-    const validatedData = CreateProjectSchema.parse(req.body);
+    const validatedData = CreateProjectSchema.parse(cleanedBody);
     const projectData: CreateProjectInput = validatedData;
 
     // Vérifier si le projet existe déjà
@@ -331,6 +352,25 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     
   } catch (error) {
     console.error('Error creating project:', error);
+    
+    // Gestion spécifique des erreurs de validation Zod
+    if (error instanceof Error && error.name === 'ZodError') {
+      return res.status(400).json({ 
+        error: 'Données invalides',
+        details: error.message,
+        code: 'VALIDATION_ERROR'
+      });
+    }
+    
+    // Gestion spécifique des erreurs JSON
+    if (error instanceof SyntaxError && error.message.includes('JSON')) {
+      return res.status(400).json({ 
+        error: 'Format JSON invalide. Vérifiez que les données ne contiennent pas de caractères de contrôle.',
+        details: error.message,
+        code: 'JSON_PARSE_ERROR'
+      });
+    }
+    
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'PROJECT_CREATION_ERROR'

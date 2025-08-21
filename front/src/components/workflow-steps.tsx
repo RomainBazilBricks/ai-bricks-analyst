@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useGetWorkflowStatus, useInitiateWorkflow, useGetAnalysisSteps, useTriggerStep0 } from "@/api/workflow";
 import { useSendMessageToTool, type SendMessageInput } from "@/api/external-tools";
 import { useSaveAIConversation } from "@/api/ai-conversations";
@@ -20,7 +20,9 @@ import {
   Loader2,
   FileText,
   Package,
-  Shield
+  Shield,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
 
@@ -34,6 +36,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
   const [sendingPrompts, setSendingPrompts] = useState<Set<number>>(new Set());
   const [promptResults, setPromptResults] = useState<Map<number, { result: string; error?: string }>>(new Map());
   const [selectedPrompt, setSelectedPrompt] = useState<{ step: any; prompt: string } | null>(null);
+  const [isAccordionOpen, setIsAccordionOpen] = useState<boolean | null>(null);
 
   // Hook pour récupérer le statut du workflow
   const {
@@ -355,18 +358,48 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
   const completedSteps = hasWorkflow ? workflowStatus.completedSteps : 0;
   const totalSteps = hasWorkflow ? workflowStatus.totalSteps : (defaultSteps?.length || 4);
 
+  // Déterminer si toutes les étapes sont complètes
+  const allStepsComplete = hasWorkflow && displaySteps.length > 0 && displaySteps.every(step => step.status === 'completed');
+
+  // Gérer l'état initial de l'accordéon
+  React.useEffect(() => {
+    if (isAccordionOpen === null) {
+      // Si toutes les étapes sont complètes, fermer par défaut, sinon ouvrir
+      setIsAccordionOpen(!allStepsComplete);
+    }
+  }, [allStepsComplete, isAccordionOpen]);
+
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5" />
-            Workflow d'analyse
-          </CardTitle>
-          <CardDescription>
-            Suivi des étapes d'analyse automatisée du projet
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <CardTitle 
+              className="flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors"
+              onClick={() => setIsAccordionOpen(!isAccordionOpen)}
+            >
+              <Brain className="h-5 w-5" />
+              Workflow d'analyse
+              {allStepsComplete && (
+                <CheckCircle className="h-4 w-4 text-green-500" />
+              )}
+              {isAccordionOpen ? (
+                <ChevronDown className="h-4 w-4 transition-transform" />
+              ) : (
+                <ChevronRight className="h-4 w-4 transition-transform" />
+              )}
+            </CardTitle>
+          </div>
+          {!isAccordionOpen && (
+            <CardDescription>
+              {allStepsComplete 
+                ? `Toutes les étapes sont terminées (${completedSteps}/${totalSteps}). Cliquez pour afficher les détails.`
+                : `Suivi des étapes d'analyse automatisée du projet (${completedSteps}/${totalSteps} complétées)`
+              }
+            </CardDescription>
+          )}
         </CardHeader>
+        {isAccordionOpen && (
         <CardContent>
           {((isWorkflowLoading && !(isWorkflowError && (workflowError as any)?.response?.status === 404)) || isStepsLoading) ? (
             <div className="space-y-4">
@@ -613,6 +646,7 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
             </div>
           )}
         </CardContent>
+        )}
       </Card>
 
       {/* Modal pour afficher le prompt */}

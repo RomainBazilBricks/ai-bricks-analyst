@@ -18,7 +18,9 @@ import {
   CheckCircle,
   Clock,
   Trash2,
-  Package
+  Package,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import type { DocumentResponse } from "@shared/types/projects";
 
@@ -101,6 +103,7 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
   const [expandedDocument, setExpandedDocument] = useState<string | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<string | null>(null);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [isAccordionOpen, setIsAccordionOpen] = useState(false);
 
   const {
     data: documents,
@@ -300,15 +303,23 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Documents du projet
-          <Badge variant="secondary" className="ml-auto">
-            {documents.length}
-          </Badge>
-        </CardTitle>
-        {documents.length > 0 && (
-          <div className="flex justify-end mt-2">
+        <div className="flex items-center justify-between">
+          <CardTitle 
+            className="flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors"
+            onClick={() => setIsAccordionOpen(!isAccordionOpen)}
+          >
+            <FileText className="h-5 w-5" />
+            Documents du projet
+            <Badge variant="secondary">
+              {documents.length}
+            </Badge>
+            {isAccordionOpen ? (
+              <ChevronDown className="h-4 w-4 transition-transform" />
+            ) : (
+              <ChevronRight className="h-4 w-4 transition-transform" />
+            )}
+          </CardTitle>
+          {documents.length > 0 && isAccordionOpen && (
             <Button
               variant="destructive"
               size="sm"
@@ -316,15 +327,28 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
               className="flex items-center gap-2"
             >
               <Trash2 className="h-4 w-4" />
-              Supprimer tous les documents
+              Supprimer tous
             </Button>
-          </div>
+          )}
+        </div>
+        {!isAccordionOpen && (
+          <CardDescription>
+            Cliquez pour afficher les {documents.length} document{documents.length > 1 ? 's' : ''} du projet
+            {documents.some(doc => doc.size > 20 * 1024 * 1024) && (
+              <div className="flex items-center gap-2 mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                <span className="text-sm text-red-800">
+                  <strong>Attention :</strong> Certains documents dépassent 20MB et ne seront pas analysés
+                </span>
+              </div>
+            )}
+          </CardDescription>
         )}
-
       </CardHeader>
-      <CardContent>
-        {/* Section ZIP */}
-        {project?.zipUrl ? (
+      {isAccordionOpen && (
+        <CardContent>
+          {/* Section ZIP */}
+          {project?.zipUrl ? (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3 flex-1">
@@ -609,7 +633,8 @@ export const ProjectDocuments: React.FC<ProjectDocumentsProps> = ({ projectUniqu
           </div>
         )}
 
-      </CardContent>
+        </CardContent>
+      )}
     </Card>
   );
 };
