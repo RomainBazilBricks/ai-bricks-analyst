@@ -1512,7 +1512,8 @@ export const receiveMissingDocuments = async (req: Request, res: Response): Prom
     // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
     let nextStepTriggered = false;
     if (skipAutoTrigger !== 'true') {
-      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 3);
+      // ✅ CORRECTION: Utiliser l'ordre correct de l'étape qui vient d'être terminée (order = 4)
+      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, analysisStep[0].order);
       nextStepTriggered = triggerResult.success;
       if (!triggerResult.success) {
         console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
@@ -1688,7 +1689,8 @@ export const receiveStrengthsAndWeaknesses = async (req: Request, res: Response)
     // ✅ Déclencher automatiquement l'étape suivante seulement si pas en mode debug
     let nextStepTriggered = false;
     if (skipAutoTrigger !== 'true') {
-      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, 4);
+      // ✅ CORRECTION: Utiliser l'ordre correct de l'étape qui vient d'être terminée (order = 5)
+      const triggerResult = await triggerNextWorkflowStep(projectUniqueId, analysisStep[0].order);
       nextStepTriggered = triggerResult.success;
       if (!triggerResult.success) {
         console.warn(`⚠️ Échec du déclenchement automatique de l'étape suivante: ${triggerResult.error}`);
