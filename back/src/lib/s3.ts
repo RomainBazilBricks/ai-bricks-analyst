@@ -5,9 +5,8 @@ import dotenv from 'dotenv';
 import archiver from 'archiver';
 import { Readable } from 'stream';
 import yauzl from 'yauzl';
-import { promisify } from 'util';
 import sharp from 'sharp';
-import { gzip } from 'zlib';
+import { PDFDocument } from 'pdf-lib';
 
 dotenv.config();
 
@@ -21,6 +20,35 @@ export const s3Client = new S3Client({
 });
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME!;
+
+/**
+ * Optimise un PDF en réduisant sa taille tout en gardant le format .pdf
+ */
+async function optimizePdf(buffer: Buffer): Promise<Buffer> {
+  try {
+    console.log(`📄 Optimisation PDF native en cours...`);
+    
+    // Charger le PDF avec pdf-lib
+    const pdfDoc = await PDFDocument.load(buffer);
+    
+    // Sauvegarder avec optimisation (compression automatique)
+    const optimizedPdfBytes = await pdfDoc.save({
+      useObjectStreams: false, // Désactive les object streams pour une meilleure compression
+      addDefaultPage: false,
+      objectsPerTick: 50, // Optimise la performance
+    });
+    
+    const optimizedBuffer = Buffer.from(optimizedPdfBytes);
+    
+    console.log(`✅ PDF optimisé: ${(buffer.length / 1024 / 1024).toFixed(2)}MB → ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    
+    return optimizedBuffer;
+  } catch (error) {
+    console.error(`❌ Erreur lors de l'optimisation PDF:`, error);
+    console.log(`⚠️ Retour au PDF original`);
+    return buffer; // Retourner le buffer original en cas d'erreur
+  }
+}
 
 /**
  * Compresse un fichier si sa taille dépasse 10MB
@@ -78,20 +106,18 @@ async function compressFileIfNeeded(
       newMimeType = 'image/jpeg';
       
     } else if (mimeType === 'application/pdf') {
-      // Pour les PDF, on utilise gzip (compression générique)
-      console.log(`📄 Compression PDF (gzip): ${fileName}`);
-      const gzipAsync = promisify(gzip);
-      compressedBuffer = await gzipAsync(buffer);
-      newFileName = fileName + '.gz';
-      newMimeType = 'application/gzip';
+      // Pour les PDF, optimisation native uniquement (garde toujours le format .pdf)
+      console.log(`📄 Optimisation PDF native: ${fileName}`);
+      compressedBuffer = await optimizePdf(buffer);
+      newFileName = fileName; // ✅ Garde toujours l'extension .pdf
+      newMimeType = 'application/pdf'; // ✅ Garde le type MIME PDF
       
     } else {
-      // Compression générique avec gzip pour autres types
-      console.log(`📦 Compression générique (gzip): ${fileName}`);
-      const gzipAsync = promisify(gzip);
-      compressedBuffer = await gzipAsync(buffer);
-      newFileName = fileName + '.gz';
-      newMimeType = 'application/gzip';
+      // Pas de compression pour les autres types, garde le format original
+      console.log(`📄 Fichier volumineux conservé tel quel: ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+      compressedBuffer = buffer; // Garde le fichier original
+      newFileName = fileName; // ✅ Garde l'extension originale
+      newMimeType = mimeType; // ✅ Garde le type MIME original
     }
 
     const compressionRatio = ((buffer.length - compressedBuffer.length) / buffer.length * 100).toFixed(1);
