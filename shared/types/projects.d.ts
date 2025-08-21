@@ -25,13 +25,15 @@ export type Project = {
     id: string;
     name: string;
     siret: string;
-    reputationDescription: string;
+    reputationScore?: number;
+    reputationJustification?: string;
   };
   projectOwner?: {
     id: string;
     name: string;
     experienceYears: number;
-    reputationDescription: string;
+    reputationScore?: number;
+    reputationJustification?: string;
   };
 };
 

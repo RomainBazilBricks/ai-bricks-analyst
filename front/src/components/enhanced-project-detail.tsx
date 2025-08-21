@@ -42,12 +42,14 @@ interface EnhancedProjectDetailProps {
     company?: {
       name: string;
       siret: string;
-      reputationDescription: string;
+      reputationScore?: number;
+      reputationJustification?: string;
     };
     projectOwner?: {
       name: string;
       experienceYears: number;
-      reputationDescription: string;
+      reputationScore?: number;
+      reputationJustification?: string;
     };
   };
 }

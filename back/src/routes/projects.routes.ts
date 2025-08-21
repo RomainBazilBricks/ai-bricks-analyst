@@ -3,6 +3,7 @@ import {
   createProject, 
   getPaginatedProjects, 
   getProjectById, 
+  getProjectDetails,
   getProjectDocuments,
   getProjectDocumentUrls,
   getProjectDocumentsListPage,
@@ -48,6 +49,14 @@ router.get('/', getPaginatedProjects);
  * @returns {ProjectResponse} Projet trouvé
  */
 router.get('/:projectUniqueId', getProjectById);
+
+/**
+ * @route GET /api/projects/:projectUniqueId/details
+ * @description Récupère les détails complets d'un projet avec porteur et société
+ * @param projectUniqueId - Identifiant unique du projet
+ * @returns {ProjectVisualizationType} Projet avec détails complets
+ */
+router.get('/:projectUniqueId/details', getProjectDetails);
 
 /**
  * @route GET /api/projects/:projectUniqueId/documents

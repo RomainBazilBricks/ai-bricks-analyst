@@ -1872,4 +1872,74 @@ export const downloadProjectZip = async (req: Request, res: Response): Promise<a
       code: 'DOWNLOAD_ZIP_ERROR'
     });
   }
+};
+
+/**
+ * Récupère les détails complets d'un projet avec porteur et société
+ * @route GET /api/projects/:projectUniqueId/details
+ * @param {string} projectUniqueId - Identifiant unique du projet
+ * @returns {ProjectVisualizationType} Projet avec détails complets
+ */
+export const getProjectDetails = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    // Trouver le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Project not found',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    const projectData = project[0];
+
+    // Récupérer le porteur de projet
+    const projectOwner = await db
+      .select()
+      .from(project_owners)
+      .where(eq(project_owners.projectId, projectData.id))
+      .limit(1);
+
+    // Récupérer la société
+    const company = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.projectId, projectData.id))
+      .limit(1);
+
+    // Construire la réponse
+    const response = {
+      ...projectData,
+      budgetTotal: parseFloat(projectData.budgetTotal),
+      estimatedRoi: parseFloat(projectData.estimatedRoi),
+      company: company.length > 0 ? {
+        name: company[0].name,
+        siret: company[0].siret,
+        reputationScore: company[0].reputationScore,
+        reputationJustification: company[0].reputationJustification,
+      } : undefined,
+      projectOwner: projectOwner.length > 0 ? {
+        name: projectOwner[0].name,
+        experienceYears: projectOwner[0].experienceYears,
+        reputationScore: projectOwner[0].reputationScore,
+        reputationJustification: projectOwner[0].reputationJustification,
+      } : undefined,
+    };
+
+    res.json(response);
+    
+  } catch (error) {
+    console.error('Error fetching project details:', error);
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'FETCH_PROJECT_DETAILS_ERROR'
+    });
+  }
 }; 

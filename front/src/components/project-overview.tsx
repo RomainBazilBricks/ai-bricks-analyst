@@ -23,12 +23,14 @@ interface ProjectOverviewProps {
     company?: {
       name: string;
       siret: string;
-      reputationDescription: string;
+      reputationScore?: number;
+      reputationJustification?: string;
     };
     projectOwner?: {
       name: string;
       experienceYears: number;
-      reputationDescription: string;
+      reputationScore?: number;
+      reputationJustification?: string;
     };
   };
   onStartAnalysis?: () => void;
@@ -185,10 +187,10 @@ export const ProjectOverview = ({
                 <p className="font-semibold text-gray-900">{project.company.name}</p>
                 <p className="text-sm text-gray-600">SIRET: {project.company.siret}</p>
               </div>
-              {project.company.reputationDescription && (
+              {project.company.reputationScore && (
                 <div>
                   <p className="text-sm font-medium text-gray-700">Réputation</p>
-                  <p className="text-sm text-gray-600">{project.company.reputationDescription}</p>
+                  <p className="text-sm text-gray-600">{project.company.reputationScore}/10</p>
                 </div>
               )}
             </CardContent>
@@ -211,10 +213,10 @@ export const ProjectOverview = ({
                   {project.projectOwner.experienceYears} ans d'expérience
                 </p>
               </div>
-              {project.projectOwner.reputationDescription && (
+              {project.projectOwner.reputationScore && (
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Profil</p>
-                  <p className="text-sm text-gray-600">{project.projectOwner.reputationDescription}</p>
+                  <p className="text-sm font-medium text-gray-700">Réputation</p>
+                  <p className="text-sm text-gray-600">{project.projectOwner.reputationScore}/10</p>
                 </div>
               )}
             </CardContent>

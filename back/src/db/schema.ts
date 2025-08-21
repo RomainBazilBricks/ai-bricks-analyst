@@ -114,7 +114,6 @@ export const project_owners = pgTable('project_owners', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 256 }).notNull(),
   experienceYears: integer('experience_years').notNull(),
-  reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
   reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
   reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -126,7 +125,6 @@ export const companies = pgTable('companies', {
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 512 }).notNull(),
   siret: varchar('siret', { length: 14 }).notNull().unique(),
-  reputationDescription: text('reputation_description').default('').notNull(), // Free text for reputation, optional
   reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
   reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -317,7 +315,6 @@ export const CreateProjectOwnerSchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   name: z.string().min(1, 'Name is required'),
   experienceYears: z.number().int().nonnegative('Experience years must be non-negative'),
-  reputationDescription: z.string().optional(), // Optional for IA flexibility
 });
 
 // Schema for POST /companies
@@ -325,7 +322,6 @@ export const CreateCompanySchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   name: z.string().min(1, 'Name is required'),
   siret: z.string().length(14, 'SIRET must be 14 characters'),
-  reputationDescription: z.string().optional(), // Optional for IA flexibility
 });
 
 // Schema for POST /documents
@@ -636,8 +632,8 @@ export type ProjectVisualizationType = {
   estimatedRoi: number;
   startDate: Date;
   fundingExpectedDate: Date;
-  company: { name: string; siret: string; reputationDescription: string };
-  projectOwner: { name: string; experienceYears: number; reputationDescription: string };
+  company: { name: string; siret: string; reputationScore?: number; reputationJustification?: string };
+  projectOwner: { name: string; experienceYears: number; reputationScore?: number; reputationJustification?: string };
   sessions: {
     id: string;
     name: string;
