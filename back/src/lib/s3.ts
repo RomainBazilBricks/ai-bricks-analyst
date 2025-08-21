@@ -51,6 +51,54 @@ async function optimizePdf(buffer: Buffer): Promise<Buffer> {
 }
 
 /**
+ * Optimise un PDF progressivement jusqu'à atteindre la taille cible (en MB)
+ */
+async function optimizePdfToTarget(buffer: Buffer, targetSizeMB: number): Promise<Buffer> {
+  const targetSize = targetSizeMB * 1024 * 1024;
+  
+  try {
+    console.log(`📄 Optimisation PDF progressive vers ${targetSizeMB}MB...`);
+    
+    // Étape 1: Optimisation de base
+    let optimizedBuffer = await optimizePdf(buffer);
+    console.log(`📊 Après optimisation de base: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    
+    if (optimizedBuffer.length <= targetSize) {
+      console.log(`✅ Objectif atteint avec optimisation de base`);
+      return optimizedBuffer;
+    }
+    
+    // Étape 2: Optimisation plus agressive avec pdf-lib
+    const pdfDoc = await PDFDocument.load(buffer);
+    
+    // Sauvegarder avec compression maximale
+    const aggressiveBytes = await pdfDoc.save({
+      useObjectStreams: true, // Active les object streams pour plus de compression
+      addDefaultPage: false,
+      objectsPerTick: 10, // Plus de compression
+      updateFieldAppearances: false, // Désactive les apparences pour économiser l'espace
+    });
+    
+    optimizedBuffer = Buffer.from(aggressiveBytes);
+    console.log(`📊 Après optimisation agressive: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    
+    if (optimizedBuffer.length <= targetSize) {
+      console.log(`✅ Objectif atteint avec optimisation agressive`);
+      return optimizedBuffer;
+    }
+    
+    // Si toujours trop gros, on garde le meilleur résultat obtenu
+    console.log(`⚠️ Impossible d'atteindre ${targetSizeMB}MB, meilleur résultat: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
+    return optimizedBuffer;
+    
+  } catch (error) {
+    console.error(`❌ Erreur lors de l'optimisation PDF progressive:`, error);
+    console.log(`⚠️ Retour au PDF original`);
+    return buffer;
+  }
+}
+
+/**
  * Compresse un fichier si sa taille dépasse 10MB
  * @param buffer - Buffer du fichier original
  * @param fileName - Nom du fichier
@@ -106,16 +154,26 @@ async function compressFileIfNeeded(
       newMimeType = 'image/jpeg';
       
     } else if (mimeType === 'application/pdf') {
-      // Pour les PDF, optimisation native uniquement (garde toujours le format .pdf)
-      console.log(`📄 Optimisation PDF native: ${fileName}`);
-      compressedBuffer = await optimizePdf(buffer);
+      // Pour les PDF, optimisation progressive jusqu'à 20MB max
+      console.log(`📄 Optimisation PDF progressive: ${fileName}`);
+      compressedBuffer = await optimizePdfToTarget(buffer, 20); // Fonction qui optimise jusqu'à 20MB
       newFileName = fileName; // ✅ Garde toujours l'extension .pdf
       newMimeType = 'application/pdf'; // ✅ Garde le type MIME PDF
       
     } else {
-      // Pas de compression pour les autres types, garde le format original
-      console.log(`📄 Fichier volumineux conservé tel quel: ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
-      compressedBuffer = buffer; // Garde le fichier original
+      // Pour les autres types, garder le format original même si > 20MB
+      console.log(`📄 Fichier: ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
+      
+      const TARGET_SIZE = 20 * 1024 * 1024; // 20MB cible
+      
+      if (buffer.length <= TARGET_SIZE) {
+        console.log(`✅ Fichier acceptable (< 20MB)`);
+      } else {
+        console.log(`⚠️ Fichier volumineux (> 20MB) mais format original conservé`);
+      }
+      
+      // Toujours garder le format original
+      compressedBuffer = buffer;
       newFileName = fileName; // ✅ Garde l'extension originale
       newMimeType = mimeType; // ✅ Garde le type MIME original
     }
