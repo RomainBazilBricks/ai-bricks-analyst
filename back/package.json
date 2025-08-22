@@ -12,6 +12,7 @@
     "drizzle:push": "drizzle-kit push",
     "drizzle:pull": "drizzle-kit pull",
     "update-prompts": "ts-node --require module-alias/register src/scripts/update-prompts.ts",
+    "update-prompts-dynamic": "ts-node --require module-alias/register src/scripts/update-prompts-dynamic-urls.ts",
     "reset-steps": "ts-node --require module-alias/register src/scripts/reset-workflow-steps.ts"
   },
   "author": "",

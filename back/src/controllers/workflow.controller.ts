@@ -74,9 +74,15 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
     // Remplacer les placeholders dans le prompt
     let processedPrompt = prompt.replace(/{projectUniqueId}/g, projectUniqueId);
     
+    // Récupérer l'URL de base de l'application (dynamique selon l'environnement)
+    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+    
+    // Remplacer tous les placeholders d'URL
+    processedPrompt = processedPrompt.replace(/{BASE_URL}/g, baseUrl);
+    processedPrompt = processedPrompt.replace(/https:\/\/ai-bricks-analyst-production\.up\.railway\.app/g, baseUrl);
+    
     // Remplacer {documentListUrl} par l'URL de la page des documents
     if (processedPrompt.includes('{documentListUrl}')) {
-      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
       const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
       processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
     }
