@@ -24,7 +24,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Middleware JSON custom global qui nettoie les caractères de contrôle
+// Middleware JSON custom global qui nettoie les caractères de contrôle et corrige les erreurs communes
 app.use((req, res, next) => {
   // Seulement pour les requêtes JSON
   if (req.headers['content-type']?.includes('application/json')) {
@@ -37,14 +37,21 @@ app.use((req, res, next) => {
     req.on('end', () => {
       try {
         // Nettoyer les caractères de contrôle problématiques
-        const cleanedBody = body.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+        let cleanedBody = body.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+        
+        // Correction spécifique pour les erreurs de virgules manquantes dans les tableaux
+        // Détecter les patterns comme: "text""http ou "text""autre_text
+        cleanedBody = cleanedBody.replace(/("(?:[^"\\]|\\.)*")("(?:[^"\\]|\\.)*")/g, '$1,$2');
+        
+        console.log('🧹 JSON nettoyé et corrigé pour:', req.path);
         
         // Parser le JSON nettoyé
         req.body = JSON.parse(cleanedBody);
-        console.log('✅ JSON nettoyé et parsé avec succès pour:', req.path);
+        console.log('✅ JSON parsé avec succès pour:', req.path);
         next();
       } catch (error) {
         console.error('❌ Erreur parsing JSON même après nettoyage:', error);
+        console.error('❌ Contenu problématique (premiers 500 chars):', body.substring(0, 500));
         return res.status(400).json({
           error: 'Format JSON invalide',
           details: (error as Error).message,
