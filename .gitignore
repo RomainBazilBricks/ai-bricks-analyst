@@ -26,6 +26,8 @@ out/
 .env.test.local
 .env.production.local
 .env.*.local
+.env.preprod
+back/.env.preprod
 
 # Ngrok temporary files
 ngrok-urls.txt
