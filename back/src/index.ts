@@ -2,7 +2,7 @@ import './alias-config';
 
 import app from './app';
 import dotenv from 'dotenv';
-import { initializeDefaultAnalysisSteps } from '@/controllers/workflow.controller';
+import { initializeDefaultAnalysisSteps, startTimeoutMonitoring } from '@/controllers/workflow.controller';
 
 dotenv.config();
 
@@ -17,7 +17,11 @@ app.listen(PORT, HOST, async () => {
     // Initialiser les étapes d'analyse par défaut
     await initializeDefaultAnalysisSteps();
     console.log(`✅ Default analysis steps initialized`);
+    
+    // Démarrer le monitoring des tâches en timeout
+    startTimeoutMonitoring();
+    console.log(`✅ Timeout monitoring started`);
   } catch (error) {
-    console.error(`❌ Error initializing default analysis steps:`, error);
+    console.error(`❌ Error initializing application:`, error);
   }
 });

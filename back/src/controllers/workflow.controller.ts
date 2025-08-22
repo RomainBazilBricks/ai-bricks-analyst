@@ -29,7 +29,7 @@ import {
   api_configurations
 } from '@/db/schema';
 import { createZipFromDocuments } from '@/lib/s3';
-import { eq, and, asc, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, or, sql } from 'drizzle-orm';
 import type { 
   CreateAnalysisStepInput,
   UpdateWorkflowStepInput,
@@ -41,9 +41,9 @@ import type {
 } from '@shared/types/projects';
 
 /**
- * Fonction utilitaire pour envoyer un prompt à l'IA externe
+ * Fonction utilitaire pour envoyer un prompt à l'IA externe avec gestion des retries
  */
-const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
+const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: number, stepName: string, conversationUrl?: string, isRetry: boolean = false): Promise<{ success: boolean; error?: string; conversationUrl?: string }> => {
   try {
     // Récupérer la configuration API Python active
     let pythonApiUrl = process.env.AI_INTERFACE_ACTION_URL || process.env.AI_INTERFACE_URL;
@@ -100,7 +100,7 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 30000, // 30 secondes de timeout pour les tâches IA
+      timeout: 600000, // 10 minutes de timeout pour les tâches IA
     });
 
     if (response.data && response.data.conversation_url) {
@@ -119,10 +119,158 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
     }
   } catch (error: any) {
     console.error(`❌ Erreur lors de l'envoi du prompt à l'IA pour l'étape ${stepName}:`, error.message);
+    
+    // Si c'est un timeout et que ce n'est pas déjà un retry, on va déclencher le système de retry
+    const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
+    if (isTimeout && !isRetry) {
+      console.log(`⏰ Timeout détecté pour l'étape ${stepName}, le système de retry prendra le relais`);
+    }
+    
     return {
       success: false,
       error: error.message || 'Erreur de connexion à l\'API Python'
     };
+  }
+};
+
+/**
+ * Fonction pour gérer les retries automatiques des tâches en timeout
+ */
+const handleWorkflowStepRetry = async (projectUniqueId: string, stepId: number): Promise<{ success: boolean; error?: string; retryTriggered?: boolean }> => {
+  try {
+    console.log(`🔄 Gestion du retry pour le projet: ${projectUniqueId}, étape: ${stepId}`);
+    
+    // Récupérer le projet
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return { success: false, error: 'Projet non trouvé' };
+    }
+
+    // Récupérer l'étape du workflow
+    const workflowStep = await db
+      .select({
+        workflow: project_analysis_progress,
+        step: analysis_steps
+      })
+      .from(project_analysis_progress)
+      .leftJoin(analysis_steps, eq(project_analysis_progress.stepId, analysis_steps.id))
+      .where(and(
+        eq(project_analysis_progress.projectId, project[0].id),
+        eq(project_analysis_progress.stepId, stepId)
+      ))
+      .limit(1);
+
+    if (workflowStep.length === 0) {
+      return { success: false, error: 'Étape de workflow non trouvée' };
+    }
+
+    const currentWorkflow = workflowStep[0].workflow;
+    const currentStep = workflowStep[0].step;
+
+    if (!currentStep) {
+      return { success: false, error: 'Définition d\'étape non trouvée' };
+    }
+
+    // Vérifier si on peut encore faire des retries
+    const currentRetryCount = currentWorkflow.retryCount || 0;
+    const maxRetries = currentWorkflow.maxRetries || 2;
+
+    if (currentRetryCount >= maxRetries) {
+      console.log(`❌ Nombre maximum de retries atteint (${currentRetryCount}/${maxRetries}) pour l'étape ${currentStep.name}`);
+      
+      // Marquer comme définitivement échoué
+      await db
+        .update(project_analysis_progress)
+        .set({
+          status: 'failed',
+          content: `Échec définitif après ${currentRetryCount} tentatives. Timeout de 10 minutes dépassé à chaque fois.`,
+          updatedAt: new Date(),
+        })
+        .where(eq(project_analysis_progress.id, currentWorkflow.id));
+
+      return { success: false, error: `Nombre maximum de retries atteint (${currentRetryCount}/${maxRetries})` };
+    }
+
+    // Incrémenter le compteur de retry
+    const newRetryCount = currentRetryCount + 1;
+    console.log(`🔄 Tentative de retry ${newRetryCount}/${maxRetries} pour l'étape ${currentStep.name}`);
+
+    await db
+      .update(project_analysis_progress)
+      .set({
+        retryCount: newRetryCount,
+        lastRetryAt: new Date(),
+        status: 'in_progress', // Remettre en in_progress pour le retry
+        updatedAt: new Date(),
+      })
+      .where(eq(project_analysis_progress.id, currentWorkflow.id));
+
+    // Récupérer l'URL de conversation existante si disponible
+    const conversationUrl = currentWorkflow.manusConversationUrl || undefined;
+
+    // Relancer l'étape avec le flag isRetry = true
+    const retryResult = await sendPromptToAI(
+      currentStep.prompt,
+      projectUniqueId,
+      stepId,
+      currentStep.name,
+      conversationUrl,
+      true // isRetry = true
+    );
+
+    if (retryResult.success) {
+      console.log(`✅ Retry ${newRetryCount} réussi pour l'étape ${currentStep.name}`);
+      
+      // Mettre à jour l'URL de conversation si elle a changé
+      if (retryResult.conversationUrl && retryResult.conversationUrl !== conversationUrl) {
+        await db
+          .update(project_analysis_progress)
+          .set({
+            manusConversationUrl: retryResult.conversationUrl,
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_progress.id, currentWorkflow.id));
+      }
+
+      return { success: true, retryTriggered: true };
+    } else {
+      console.error(`❌ Retry ${newRetryCount} échoué pour l'étape ${currentStep.name}: ${retryResult.error}`);
+      
+      // Si c'est le dernier retry, marquer comme définitivement échoué
+      if (newRetryCount >= maxRetries) {
+        await db
+          .update(project_analysis_progress)
+          .set({
+            status: 'failed',
+            content: `Échec définitif après ${newRetryCount} tentatives: ${retryResult.error}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_progress.id, currentWorkflow.id));
+        
+        return { success: false, error: `Échec définitif après ${newRetryCount} tentatives` };
+      } else {
+        // Marquer comme échoué temporairement, le prochain retry sera géré par le monitoring
+        await db
+          .update(project_analysis_progress)
+          .set({
+            status: 'failed',
+            content: `Retry ${newRetryCount} échoué: ${retryResult.error}. Retry automatique prévu.`,
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_progress.id, currentWorkflow.id));
+        
+        return { success: false, error: `Retry ${newRetryCount} échoué, retry automatique prévu`, retryTriggered: false };
+      }
+    }
+
+  } catch (error) {
+    console.error(`❌ Erreur lors du retry automatique:`, error);
+    return { success: false, error: (error as Error).message };
   }
 };
 
@@ -242,6 +390,103 @@ const triggerNextWorkflowStep = async (projectUniqueId: string, currentStepId: n
     console.error(`❌ Erreur lors du déclenchement automatique de l'étape suivante:`, error);
     return { success: false, error: (error as Error).message };
   }
+};
+
+/**
+ * Fonction de monitoring pour détecter et traiter les tâches en timeout
+ */
+const monitorTimeoutTasks = async (): Promise<void> => {
+  try {
+    console.log(`🔍 Monitoring des tâches en timeout...`);
+    
+    // Chercher les tâches "in_progress" ou "failed" qui sont en timeout (plus de 10 minutes)
+    const timeoutThreshold = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
+    
+    const timeoutTasks = await db
+      .select({
+        workflow: project_analysis_progress,
+        step: analysis_steps,
+        project: projects
+      })
+      .from(project_analysis_progress)
+      .leftJoin(analysis_steps, eq(project_analysis_progress.stepId, analysis_steps.id))
+      .leftJoin(projects, eq(project_analysis_progress.projectId, projects.id))
+      .where(and(
+        // Tâches en cours ou échouées temporairement
+        or(
+          eq(project_analysis_progress.status, 'in_progress'),
+          and(
+            eq(project_analysis_progress.status, 'failed'),
+            // Seulement les failed qui ne sont pas définitifs (retryCount < maxRetries)
+            sql`${project_analysis_progress.retryCount} < ${project_analysis_progress.maxRetries}`
+          )
+        ),
+        // Qui ont été mises à jour il y a plus de 10 minutes
+        sql`${project_analysis_progress.updatedAt} < ${timeoutThreshold.toISOString()}`
+      ));
+
+    console.log(`📊 ${timeoutTasks.length} tâche(s) en timeout détectée(s)`);
+
+    for (const task of timeoutTasks) {
+      if (!task.project || !task.step || !task.workflow) {
+        console.warn(`⚠️ Tâche incomplète ignorée: ${task.workflow?.id}`);
+        continue;
+      }
+
+      const { workflow, step, project } = task;
+      const currentRetryCount = workflow.retryCount || 0;
+      const maxRetries = workflow.maxRetries || 2;
+
+      console.log(`⏰ Tâche en timeout détectée: ${project.projectName} - ${step.name} (retry ${currentRetryCount}/${maxRetries})`);
+
+      // Si on a déjà atteint le maximum de retries, marquer comme définitivement échoué
+      if (currentRetryCount >= maxRetries) {
+        console.log(`❌ Marquage définitif comme échoué: ${step.name} (${currentRetryCount}/${maxRetries} retries)`);
+        
+        await db
+          .update(project_analysis_progress)
+          .set({
+            status: 'failed',
+            content: `Échec définitif: timeout de 10 minutes dépassé après ${currentRetryCount} tentatives`,
+            updatedAt: new Date(),
+          })
+          .where(eq(project_analysis_progress.id, workflow.id));
+        
+        continue;
+      }
+
+      // Sinon, déclencher un retry automatique
+      console.log(`🔄 Déclenchement du retry automatique pour: ${step.name}`);
+      
+      try {
+        const retryResult = await handleWorkflowStepRetry(project.projectUniqueId, step.id);
+        
+        if (retryResult.success) {
+          console.log(`✅ Retry automatique réussi pour: ${step.name}`);
+        } else {
+          console.error(`❌ Retry automatique échoué pour: ${step.name} - ${retryResult.error}`);
+        }
+      } catch (retryError) {
+        console.error(`❌ Erreur lors du retry automatique pour ${step.name}:`, retryError);
+      }
+    }
+
+  } catch (error) {
+    console.error(`❌ Erreur lors du monitoring des tâches en timeout:`, error);
+  }
+};
+
+/**
+ * Démarre le monitoring périodique des tâches en timeout
+ */
+export const startTimeoutMonitoring = (): void => {
+  console.log(`🚀 Démarrage du monitoring des tâches en timeout (vérification toutes les 2 minutes)`);
+  
+  // Vérification immédiate
+  monitorTimeoutTasks();
+  
+  // Puis vérification toutes les 2 minutes
+  setInterval(monitorTimeoutTasks, 2 * 60 * 1000);
 };
 
 /**
@@ -2568,6 +2813,50 @@ export const triggerStep1Analysis = async (req: Request, res: Response): Promise
     res.status(500).json({
       error: (error as Error).message,
       code: 'TRIGGER_STEP_1_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour déclencher manuellement un retry d'une étape
+ * @route POST /api/workflow/retry-step
+ */
+export const retryWorkflowStep = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId, stepId } = req.body;
+
+    if (!projectUniqueId || !stepId) {
+      return res.status(400).json({
+        error: 'ProjectUniqueId et stepId sont requis',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    console.log(`🔄 Retry manuel demandé pour le projet: ${projectUniqueId}, étape: ${stepId}`);
+
+    const retryResult = await handleWorkflowStepRetry(projectUniqueId, parseInt(stepId));
+
+    if (retryResult.success) {
+      res.status(200).json({
+        message: 'Retry déclenché avec succès',
+        projectUniqueId,
+        stepId: parseInt(stepId),
+        retryTriggered: retryResult.retryTriggered
+      });
+    } else {
+      res.status(400).json({
+        error: retryResult.error,
+        code: 'RETRY_FAILED',
+        projectUniqueId,
+        stepId: parseInt(stepId)
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Erreur lors du retry manuel:', error);
+    res.status(500).json({
+      error: (error as Error).message,
+      code: 'RETRY_MANUAL_ERROR'
     });
   }
 };

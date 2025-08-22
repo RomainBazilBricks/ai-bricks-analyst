@@ -206,6 +206,9 @@ export const project_analysis_progress = pgTable('project_analysis_progress', {
   manusConversationUrl: text('manus_conversation_url'),
   startedAt: timestamp('started_at'),
   completedAt: timestamp('completed_at'),
+  retryCount: integer('retry_count').default(0).notNull(),
+  lastRetryAt: timestamp('last_retry_at'),
+  maxRetries: integer('max_retries').default(2).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({

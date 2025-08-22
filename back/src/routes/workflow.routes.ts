@@ -21,7 +21,8 @@ import {
   receiveFinalMessage,
   uploadZipFromUrl,
   generateZipOnly,
-  triggerStep1Analysis
+  triggerStep1Analysis,
+  retryWorkflowStep
 } from '@/controllers/workflow.controller';
 import { authenticateJWT } from '@/middlewares/auth.middleware';
 
@@ -243,5 +244,15 @@ router.post('/upload-zip-and-trigger-ai', uploadZipFromUrl);
  * @access Public (pour Manus)
  */
 router.post('/trigger-step-1/:projectUniqueId', triggerStep1Analysis);
+
+/**
+ * Endpoint pour déclencher manuellement un retry d'une étape
+ * @route POST /api/workflow/retry-step
+ * @param {string} projectUniqueId - ID unique du projet
+ * @param {number} stepId - ID de l'étape à relancer
+ * @returns {Object} Confirmation du retry
+ * @access Private (authentifié)
+ */
+router.post('/retry-step', authenticateJWT, retryWorkflowStep);
 
 export default router; 
