@@ -39,9 +39,20 @@ app.use((req, res, next) => {
         // Nettoyer les caractères de contrôle problématiques
         let cleanedBody = body.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
         
-        // Correction spécifique pour les erreurs de virgules manquantes dans les tableaux
-        // Détecter les patterns comme: "text""http ou "text""autre_text
+        // Corrections multiples pour les erreurs JSON communes de Bubble
+        
+        // 1. Corriger les virgules manquantes entre éléments de tableau
+        // Pattern: "text""autre_text" -> "text","autre_text"
         cleanedBody = cleanedBody.replace(/("(?:[^"\\]|\\.)*")("(?:[^"\\]|\\.)*")/g, '$1,$2');
+        
+        // 2. Corriger les virgules manquantes après les valeurs dans les objets
+        // Pattern: "key":"value""autre_key" -> "key":"value","autre_key"
+        cleanedBody = cleanedBody.replace(/("(?:[^"\\]|\\.)*":\s*"(?:[^"\\]|\\.)*")("(?:[^"\\]|\\.)*")/g, '$1,$2');
+        
+        // 3. Appliquer la correction plusieurs fois pour les cas multiples
+        for (let i = 0; i < 3; i++) {
+          cleanedBody = cleanedBody.replace(/("(?:[^"\\]|\\.)*")("(?:[^"\\]|\\.)*")/g, '$1,$2');
+        }
         
         console.log('🧹 JSON nettoyé et corrigé pour:', req.path);
         
@@ -51,7 +62,8 @@ app.use((req, res, next) => {
         next();
       } catch (error) {
         console.error('❌ Erreur parsing JSON même après nettoyage:', error);
-        console.error('❌ Contenu problématique (premiers 500 chars):', body.substring(0, 500));
+        console.error('❌ Contenu problématique (premiers 1000 chars):', body.substring(0, 1000));
+        console.error('❌ Contenu autour de la position d\'erreur:', body.substring(Math.max(0, 13241 - 200), 13241 + 200));
         return res.status(400).json({
           error: 'Format JSON invalide',
           details: (error as Error).message,
