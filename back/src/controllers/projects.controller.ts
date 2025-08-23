@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { eq, desc, gt, lt, asc, and } from 'drizzle-orm';
+import axios from 'axios';
 import { db } from '@/db/index';
 import { 
   projects, 
@@ -55,6 +56,40 @@ function cleanUrl(url: string): string {
  */
 export const createProject = async (req: Request, res: Response): Promise<any> => {
   try {
+    // Vérifier si le paramètre toPreprod est présent pour rediriger vers preprod
+    if (req.body.toPreprod || req.query.toPreprod) {
+      console.log('🔄 Redirection vers l\'environnement preprod détectée');
+      
+      try {
+        // Créer une copie du body sans le paramètre toPreprod
+        const { toPreprod, ...bodyWithoutToPreprod } = req.body;
+        
+        // Faire l'appel vers l'environnement preprod
+        const preprodResponse = await axios.post(
+          'https://ai-bricks-analyst-preprod.up.railway.app/api/projects',
+          bodyWithoutToPreprod,
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              // Transférer les headers d'authentification si présents
+              ...(req.headers.authorization && { 'Authorization': req.headers.authorization })
+            },
+            timeout: 30000 // 30 secondes de timeout
+          }
+        );
+        
+        console.log('✅ Redirection vers preprod réussie');
+        return res.status(preprodResponse.status).json(preprodResponse.data);
+        
+      } catch (redirectError: any) {
+        console.error('❌ Erreur lors de la redirection vers preprod:', redirectError.message);
+        return res.status(500).json({ 
+          error: 'Erreur lors de la redirection vers l\'environnement preprod',
+          details: redirectError.message 
+        });
+      }
+    }
+
     // Normaliser les noms de champs Bubble vers les noms standards
     const normalizedBody = {
       ...req.body,
