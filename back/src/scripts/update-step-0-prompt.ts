@@ -10,7 +10,7 @@ async function updateStep0Prompt() {
 
     const newPrompt = `Voici tous les documents du projet {projectUniqueId} dans une archive ZIP. Peux-tu analyser ces documents et me donner un aperçu général du projet ? Il y a {documentCount} documents au total.
 
-Une fois ton analyse terminée, déclenche l'étape suivante (Analyse globale) en faisant un POST sur : https://ai-bricks-analyst-production.up.railway.app/api/workflow/trigger-step-1/{projectUniqueId}
+Une fois ton analyse terminée, déclenche l'étape suivante (Analyse globale) en faisant un POST sur : {BASE_URL}/api/workflow/trigger-step-1/{projectUniqueId}
 
 Ce POST marquera automatiquement cette étape comme terminée et déclenchera l'analyse globale.`;
 

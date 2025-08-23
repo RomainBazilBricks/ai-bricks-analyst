@@ -18,6 +18,7 @@ import {
 } from '@/db/schema';
 import { initiateWorkflowForProject, uploadZipFromUrl } from '@/controllers/workflow.controller';
 import { uploadFileFromUrl, s3Client, extractS3KeyFromUrl, extractS3KeyFromUrlRaw, generatePresignedUrlFromS3Url, downloadFileFromS3 } from '@/lib/s3';
+import { getPreprodUrl } from '@/lib/url-utils';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
   CreateProjectInput, 
@@ -65,8 +66,10 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
         const { toPreprod, ...bodyWithoutToPreprod } = req.body;
         
         // Faire l'appel vers l'environnement preprod
+        // URL de l'environnement preprod (configurable)
+        const preprodUrl = getPreprodUrl();
         const preprodResponse = await axios.post(
-          'https://ai-bricks-analyst-preprod.up.railway.app/api/projects',
+          `${preprodUrl}/api/projects`,
           bodyWithoutToPreprod,
           {
             headers: {

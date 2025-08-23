@@ -29,6 +29,7 @@ import {
   api_configurations
 } from '@/db/schema';
 import { createZipFromDocuments } from '@/lib/s3';
+import { getBaseUrl, replaceUrlPlaceholders } from '@/lib/url-utils';
 import { eq, and, asc, desc, or, sql } from 'drizzle-orm';
 import type { 
   CreateAnalysisStepInput,
@@ -72,17 +73,11 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
     }
     
     // Remplacer les placeholders dans le prompt
-    let processedPrompt = prompt.replace(/{projectUniqueId}/g, projectUniqueId);
-    
-    // Récupérer l'URL de base de l'application (dynamique selon l'environnement)
-    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
-    
-    // Remplacer tous les placeholders d'URL
-    processedPrompt = processedPrompt.replace(/{BASE_URL}/g, baseUrl);
-    processedPrompt = processedPrompt.replace(/https:\/\/ai-bricks-analyst-production\.up\.railway\.app/g, baseUrl);
+    let processedPrompt = replaceUrlPlaceholders(prompt, projectUniqueId);
     
     // Remplacer {documentListUrl} par l'URL de la page des documents
     if (processedPrompt.includes('{documentListUrl}')) {
+      const baseUrl = getBaseUrl();
       const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
       processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
     }
@@ -1816,7 +1811,7 @@ export const testPromptProcessing = async (req: Request, res: Response): Promise
     let documentListUrl = '';
     if (prompt.includes('{documentListUrl}')) {
       // URL de base de l'API (à configurer selon l'environnement)
-      const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+      const baseUrl = getBaseUrl();
       documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
     }
     
@@ -2301,7 +2296,7 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     // Utiliser l'infrastructure existante pour envoyer à l'API Python
     // Même format que external-tools.ts mais avec zip_url
     // Construire l'URL proxy au lieu d'utiliser l'URL S3 directe
-    const baseUrl = process.env.API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
+    const baseUrl = getBaseUrl();
     const proxyZipUrl = `${baseUrl}/api/projects/${projectUniqueId}/zip/download`;
     
     const payload = {
