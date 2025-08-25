@@ -115,7 +115,10 @@ Recommandation : Pour/contre financement, avec justifications factuelles.
 
 Privilégie l'objectivité, distingue faits et suppositions, et contextualise dans le secteur [SECTEUR, ex. immobilier]. Si peu d'infos, mentionne-le explicitement.
 
-Vous devez retourner un JSON avec cette structure exacte :
+Vous devez retourner un JSON via POST à cette URL :
+{BASE_URL}/api/workflow/reputation-analysis/{projectUniqueId}
+
+Avec cette structure exacte :
 {
   "projectUniqueId": "{projectUniqueId}",
   "reputationAnalysis": {

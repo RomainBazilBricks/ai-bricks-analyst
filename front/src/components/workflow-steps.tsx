@@ -179,11 +179,19 @@ export const WorkflowSteps = ({ projectUniqueId, latestConversationUrl }: Workfl
     try {
       // Remplacer les placeholders par les vraies valeurs
       const rawPrompt = step.step?.prompt || step.prompt;
-      let processedPrompt = rawPrompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      
+      // Utiliser la même logique que axios.ts pour déterminer l'URL de base
+      const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
+      const baseUrl = isProduction 
+        ? window.location.origin  // En production, utiliser le domaine actuel
+        : 'http://localhost:3001'; // En développement, utiliser le backend local
+      
+      let processedPrompt = rawPrompt
+        .replace(/{projectUniqueId}/g, projectUniqueId)
+        .replace(/{BASE_URL}/g, baseUrl);
       
       // Remplacer {documentListUrl} par l'URL de la page des documents
       if (processedPrompt.includes('{documentListUrl}')) {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
         const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
         processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
       }
