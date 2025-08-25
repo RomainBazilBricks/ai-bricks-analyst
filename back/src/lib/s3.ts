@@ -5,8 +5,6 @@ import dotenv from 'dotenv';
 import archiver from 'archiver';
 import { Readable } from 'stream';
 import yauzl from 'yauzl';
-import sharp from 'sharp';
-import { PDFDocument } from 'pdf-lib';
 
 dotenv.config();
 
@@ -21,185 +19,7 @@ export const s3Client = new S3Client({
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME!;
 
-/**
- * Optimise un PDF en réduisant sa taille tout en gardant le format .pdf
- */
-async function optimizePdf(buffer: Buffer): Promise<Buffer> {
-  try {
-    console.log(`📄 Optimisation PDF native en cours...`);
-    
-    // Charger le PDF avec pdf-lib
-    const pdfDoc = await PDFDocument.load(buffer);
-    
-    // Sauvegarder avec optimisation (compression automatique)
-    const optimizedPdfBytes = await pdfDoc.save({
-      useObjectStreams: false, // Désactive les object streams pour une meilleure compression
-      addDefaultPage: false,
-      objectsPerTick: 50, // Optimise la performance
-    });
-    
-    const optimizedBuffer = Buffer.from(optimizedPdfBytes);
-    
-    console.log(`✅ PDF optimisé: ${(buffer.length / 1024 / 1024).toFixed(2)}MB → ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    return optimizedBuffer;
-  } catch (error) {
-    console.error(`❌ Erreur lors de l'optimisation PDF:`, error);
-    console.log(`⚠️ Retour au PDF original`);
-    return buffer; // Retourner le buffer original en cas d'erreur
-  }
-}
 
-/**
- * Optimise un PDF progressivement jusqu'à atteindre la taille cible (en MB)
- */
-async function optimizePdfToTarget(buffer: Buffer, targetSizeMB: number): Promise<Buffer> {
-  const targetSize = targetSizeMB * 1024 * 1024;
-  
-  try {
-    console.log(`📄 Optimisation PDF progressive vers ${targetSizeMB}MB...`);
-    
-    // Étape 1: Optimisation de base
-    let optimizedBuffer = await optimizePdf(buffer);
-    console.log(`📊 Après optimisation de base: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    if (optimizedBuffer.length <= targetSize) {
-      console.log(`✅ Objectif atteint avec optimisation de base`);
-      return optimizedBuffer;
-    }
-    
-    // Étape 2: Optimisation plus agressive avec pdf-lib
-    const pdfDoc = await PDFDocument.load(buffer);
-    
-    // Sauvegarder avec compression maximale
-    const aggressiveBytes = await pdfDoc.save({
-      useObjectStreams: true, // Active les object streams pour plus de compression
-      addDefaultPage: false,
-      objectsPerTick: 10, // Plus de compression
-      updateFieldAppearances: false, // Désactive les apparences pour économiser l'espace
-    });
-    
-    optimizedBuffer = Buffer.from(aggressiveBytes);
-    console.log(`📊 Après optimisation agressive: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    if (optimizedBuffer.length <= targetSize) {
-      console.log(`✅ Objectif atteint avec optimisation agressive`);
-      return optimizedBuffer;
-    }
-    
-    // Si toujours trop gros, on garde le meilleur résultat obtenu
-    console.log(`⚠️ Impossible d'atteindre ${targetSizeMB}MB, meilleur résultat: ${(optimizedBuffer.length / 1024 / 1024).toFixed(2)}MB`);
-    return optimizedBuffer;
-    
-  } catch (error) {
-    console.error(`❌ Erreur lors de l'optimisation PDF progressive:`, error);
-    console.log(`⚠️ Retour au PDF original`);
-    return buffer;
-  }
-}
-
-/**
- * Compresse un fichier si sa taille dépasse 10MB
- * @param buffer - Buffer du fichier original
- * @param fileName - Nom du fichier
- * @param mimeType - Type MIME du fichier
- * @returns Buffer compressé et nouveau nom de fichier si compression appliquée
- */
-async function compressFileIfNeeded(
-  buffer: Buffer, 
-  fileName: string, 
-  mimeType: string
-): Promise<{ buffer: Buffer; fileName: string; mimeType: string; compressed: boolean }> {
-  const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-  
-  if (buffer.length <= MAX_SIZE) {
-    console.log(`📏 Fichier ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) - Pas de compression nécessaire`);
-    return { buffer, fileName, mimeType, compressed: false };
-  }
-
-  console.log(`🗜️ Fichier ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) > 10MB - Compression en cours...`);
-
-  try {
-    let compressedBuffer: Buffer;
-    let newFileName = fileName;
-    let newMimeType = mimeType;
-
-    // Compression spécifique selon le type de fichier
-    if (mimeType.startsWith('image/')) {
-      // Compression d'image avec Sharp
-      console.log(`🖼️ Compression d'image: ${fileName}`);
-      
-      // Calculer la qualité nécessaire pour atteindre ~8MB (marge de sécurité)
-      const targetSize = 8 * 1024 * 1024;
-      let quality = Math.floor((targetSize / buffer.length) * 100);
-      quality = Math.max(10, Math.min(90, quality)); // Entre 10% et 90%
-      
-      compressedBuffer = await sharp(buffer)
-        .jpeg({ quality, progressive: true })
-        .toBuffer();
-      
-      // Si toujours trop gros, redimensionner
-      if (compressedBuffer.length > MAX_SIZE) {
-        const scaleFactor = Math.sqrt(targetSize / compressedBuffer.length);
-        const metadata = await sharp(buffer).metadata();
-        const newWidth = Math.floor((metadata.width || 1920) * scaleFactor);
-        
-        compressedBuffer = await sharp(buffer)
-          .resize(newWidth)
-          .jpeg({ quality: 80, progressive: true })
-          .toBuffer();
-      }
-      
-      newFileName = fileName.replace(/\.[^.]+$/, '.jpg');
-      newMimeType = 'image/jpeg';
-      
-    } else if (mimeType === 'application/pdf') {
-      // Pour les PDF, optimisation progressive jusqu'à 20MB max
-      console.log(`📄 Optimisation PDF progressive: ${fileName}`);
-      compressedBuffer = await optimizePdfToTarget(buffer, 20); // Fonction qui optimise jusqu'à 20MB
-      newFileName = fileName; // ✅ Garde toujours l'extension .pdf
-      newMimeType = 'application/pdf'; // ✅ Garde le type MIME PDF
-      
-    } else {
-      // Pour les autres types, garder le format original même si > 20MB
-      console.log(`📄 Fichier: ${fileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
-      
-      const TARGET_SIZE = 20 * 1024 * 1024; // 20MB cible
-      
-      if (buffer.length <= TARGET_SIZE) {
-        console.log(`✅ Fichier acceptable (< 20MB)`);
-      } else {
-        console.log(`⚠️ Fichier volumineux (> 20MB) mais format original conservé`);
-      }
-      
-      // Toujours garder le format original
-      compressedBuffer = buffer;
-      newFileName = fileName; // ✅ Garde l'extension originale
-      newMimeType = mimeType; // ✅ Garde le type MIME original
-    }
-
-    const compressionRatio = ((buffer.length - compressedBuffer.length) / buffer.length * 100).toFixed(1);
-    const finalSizeMB = (compressedBuffer.length / 1024 / 1024).toFixed(2);
-    
-    console.log(`✅ Compression réussie: ${fileName}`);
-    console.log(`   - Taille originale: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
-    console.log(`   - Taille compressée: ${finalSizeMB}MB`);
-    console.log(`   - Ratio de compression: ${compressionRatio}%`);
-    console.log(`   - Nouveau nom: ${newFileName}`);
-
-    return {
-      buffer: compressedBuffer,
-      fileName: newFileName,
-      mimeType: newMimeType,
-      compressed: true
-    };
-
-  } catch (error) {
-    console.error(`❌ Erreur lors de la compression de ${fileName}:`, error);
-    console.log(`⚠️ Utilisation du fichier original sans compression`);
-    return { buffer, fileName, mimeType, compressed: false };
-  }
-}
 
 /**
  * Télécharge un fichier depuis une URL et l'upload vers S3
@@ -240,26 +60,16 @@ export async function uploadFileFromUrl(
     console.log(`  - finalFileName: ${finalFileName}`);
     console.log(`  - taille originale: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
     
-    // 🔍 IMPORTANT: Détecter les ZIP AVANT la compression !
+    // Détecter les fichiers ZIP
     const isZipFile = contentType === 'application/zip' || 
                      finalFileName.toLowerCase().endsWith('.zip') ||
                      contentType === 'application/x-zip-compressed';
     
-    // Compression automatique seulement pour les fichiers NON-ZIP
-    if (!isZipFile) {
-      const compressionResult = await compressFileIfNeeded(buffer, finalFileName, contentType);
-      buffer = compressionResult.buffer;
-      finalFileName = compressionResult.fileName;
-      contentType = compressionResult.mimeType;
-      
-      if (compressionResult.compressed) {
-        console.log(`🗜️ Fichier compressé: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB)`);
-      }
-    } else {
-      console.log(`📦 ZIP détecté: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) - Pas de compression, dézippage à venir`);
+    if (isZipFile) {
+      console.log(`📦 ZIP détecté: ${finalFileName} (${(buffer.length / 1024 / 1024).toFixed(2)}MB) - Dézippage à venir`);
     }
     
-    // Calculer le hash du fichier (après compression éventuelle) pour détecter les doublons
+    // Calculer le hash du fichier pour détecter les doublons
     const hash = crypto.createHash('sha256').update(buffer).digest('hex');
     
     if (isZipFile) {
@@ -558,11 +368,7 @@ export async function createZipFromDocuments(
   let failureCount = 0;
   const failedDocuments: string[] = [];
 
-  // Ajouter chaque document au ZIP (en excluant ceux > 20MB)
-  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-  let skippedLargeFiles = 0;
-  const skippedFiles: string[] = [];
-  
+  // Ajouter chaque document au ZIP
   for (const doc of filteredDocuments) {
     try {
       console.log(`📄 Tentative d'ajout du document: ${doc.fileName}`);
@@ -570,23 +376,14 @@ export async function createZipFromDocuments(
       
       const fileBuffer = await downloadFileFromS3(doc.url);
       
-      // Vérifier la taille du fichier
       const fileSizeMB = (fileBuffer.length / 1024 / 1024).toFixed(2);
-      
-      if (fileBuffer.length > MAX_FILE_SIZE) {
-        // Fichier trop volumineux, l'exclure du ZIP
-        skippedLargeFiles++;
-        skippedFiles.push(doc.fileName);
-        console.log(`⚠️ Fichier exclu du ZIP (trop volumineux): ${doc.fileName} (${fileSizeMB}MB > 20MB)`);
-        continue; // Passer au fichier suivant
-      }
       
       // Nettoyer le nom de fichier pour éviter les problèmes de chemin
       const cleanFileName = doc.fileName.replace(/[<>:"/\\|?*]/g, '_');
       archive.append(fileBuffer, { name: cleanFileName });
       
       successCount++;
-      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${fileSizeMB}MB) (${successCount}/${filteredDocuments.length - skippedLargeFiles})`);
+      console.log(`✅ Document ajouté avec succès: ${doc.fileName} (${fileSizeMB}MB) (${successCount}/${filteredDocuments.length})`);
     } catch (error) {
       failureCount++;
       failedDocuments.push(doc.fileName);
@@ -598,12 +395,8 @@ export async function createZipFromDocuments(
   console.log(`📊 Résumé de l'ajout des documents:`);
   console.log(`   ✅ Succès: ${successCount}/${filteredDocuments.length}`);
   console.log(`   ❌ Échecs: ${failureCount}/${filteredDocuments.length}`);
-  console.log(`   ⚠️ Exclus (> 20MB): ${skippedLargeFiles}/${filteredDocuments.length}`);
   if (failedDocuments.length > 0) {
     console.log(`   📋 Documents échoués: ${failedDocuments.join(', ')}`);
-  }
-  if (skippedFiles.length > 0) {
-    console.log(`   📋 Documents exclus: ${skippedFiles.join(', ')}`);
   }
 
     // Ajouter les fichiers conversation.txt et fiche.txt si les données sont disponibles et non vides
