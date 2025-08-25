@@ -1191,7 +1191,7 @@ export const receiveReputationAnalysis = async (req: Request, res: Response): Pr
           .values({
             projectId: project[0].id,
             name: company.name,
-            siret: company.siret || `TEMP${Date.now()}`, // SIRET temporaire si non fourni
+            siret: company.siret || null, // SIRET optionnel
             reputationScore: company.reputationScore,
             reputationJustification: company.reputationJustification,
           })

@@ -124,7 +124,7 @@ export const companies = pgTable('companies', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 512 }).notNull(),
-  siret: varchar('siret', { length: 14 }).notNull().unique(),
+  siret: varchar('siret', { length: 14 }).unique(), // SIRET optionnel et unique si fourni
   reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
   reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),

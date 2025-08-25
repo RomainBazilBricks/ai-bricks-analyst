@@ -124,9 +124,14 @@ export const useRetryStep = (
   
   return useMutation<SendMessageResponse, Error, void>({
     mutationFn: async () => {
+      // Utiliser la même logique que axios.ts pour déterminer l'URL de base
+      const isProduction = import.meta.env.PROD || window.location.hostname !== 'localhost';
+      const baseUrl = isProduction 
+        ? window.location.origin  // En production, utiliser le domaine actuel
+        : 'http://localhost:3001'; // En développement, utiliser le backend local
+      
       // Récupérer les étapes d'analyse pour trouver celle correspondant à stepOrder
-      const baseApiUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
-      const stepsResponse = await fetch(`${baseApiUrl}/api/workflow/steps`);
+      const stepsResponse = await fetch(`${baseUrl}/api/workflow/steps`);
       const steps = await stepsResponse.json();
       
       const targetStep = steps.find((step: any) => step.order === stepOrder);
@@ -135,11 +140,12 @@ export const useRetryStep = (
       }
 
       // Préparer le message avec les placeholders remplacés
-      let processedPrompt = targetStep.prompt.replace(/{projectUniqueId}/g, projectUniqueId);
+      let processedPrompt = targetStep.prompt
+        .replace(/{projectUniqueId}/g, projectUniqueId)
+        .replace(/{BASE_URL}/g, baseUrl);
       
       // Remplacer {documentListUrl} si nécessaire
       if (processedPrompt.includes('{documentListUrl}')) {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://ai-bricks-analyst-production.up.railway.app';
         const documentListUrl = `${baseUrl}/api/projects/${projectUniqueId}/documents-list`;
         processedPrompt = processedPrompt.replace(/{documentListUrl}/g, documentListUrl);
       }

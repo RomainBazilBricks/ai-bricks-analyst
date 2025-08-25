@@ -15,6 +15,13 @@
       "when": 1755849610772,
       "tag": "0001_woozy_franklin_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1756128857374,
+      "tag": "0002_high_peter_quill",
+      "breakpoints": true
     }
   ]
 }
