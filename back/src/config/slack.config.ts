@@ -55,13 +55,13 @@ export const SLACK_CHANNELS = {
   ANALYSIS_ALERTS: process.env.SLACK_CHANNEL_ANALYSIS_ALERTS || '#alertes-analyse-ia',
   
   // Canal pour les erreurs système critiques
-  SYSTEM_ALERTS: process.env.SLACK_CHANNEL_SYSTEM_ALERTS || '#alertes-systeme',
+  SYSTEM_ALERTS: process.env.SLACK_CHANNEL_SYSTEM_ALERTS || '#alertes-analyse-ia',
   
   // Canal pour les notifications générales
-  GENERAL_NOTIFICATIONS: process.env.SLACK_CHANNEL_GENERAL || '#bot-notifications',
+  GENERAL_NOTIFICATIONS: process.env.SLACK_CHANNEL_GENERAL || '#alertes-analyse-ia',
   
   // Canal de test
-  TEST: process.env.SLACK_CHANNEL_TEST || '#test-bot'
+  TEST: process.env.SLACK_CHANNEL_TEST || '#alertes-analyse-ia'
 } as const;
 
 /**

@@ -92,7 +92,7 @@ export const sendSlackSuccessNotification = async (
       );
     } else {
       await slackNotificationService.sendRawMessage(
-        process.env.SLACK_CHANNEL_GENERAL || '#bot-notifications',
+        process.env.SLACK_CHANNEL_GENERAL || '#alertes-analyse-ia',
         `✅ ${message} - ${projectName}`
       );
     }
