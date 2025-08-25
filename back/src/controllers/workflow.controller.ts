@@ -2291,6 +2291,9 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     dynamicMessage = dynamicMessage.replace(/{projectUniqueId}/g, projectUniqueId);
     dynamicMessage = dynamicMessage.replace(/{documentCount}/g, projectDocuments.length.toString());
     
+    // Remplacer les placeholders d'URL (notamment {BASE_URL})
+    dynamicMessage = replaceUrlPlaceholders(dynamicMessage, projectUniqueId);
+    
     console.log(`📝 Message final (premiers 200 chars): ${dynamicMessage.substring(0, 200)}...`);
 
     // Utiliser l'infrastructure existante pour envoyer à l'API Python

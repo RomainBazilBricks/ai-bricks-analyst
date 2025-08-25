@@ -7,9 +7,16 @@
  * Priorité: BASE_URL > API_BASE_URL > fallback production
  */
 export const getBaseUrl = (): string => {
-  return process.env.BASE_URL || 
-         process.env.API_BASE_URL || 
-         'https://ai-bricks-analyst-production.up.railway.app';
+  const baseUrl = process.env.BASE_URL || 
+                  process.env.API_BASE_URL || 
+                  'https://ai-bricks-analyst-production.up.railway.app';
+  
+  console.log(`🔍 DEBUG getBaseUrl():`);
+  console.log(`   - process.env.BASE_URL: ${process.env.BASE_URL}`);
+  console.log(`   - process.env.API_BASE_URL: ${process.env.API_BASE_URL}`);
+  console.log(`   - baseUrl final: ${baseUrl}`);
+  
+  return baseUrl;
 };
 
 /**
@@ -48,6 +55,11 @@ export const getEnvironmentUrl = (): string => {
 export const replaceUrlPlaceholders = (text: string, projectUniqueId?: string): string => {
   const baseUrl = getBaseUrl();
   
+  console.log(`🔄 DEBUG replaceUrlPlaceholders():`);
+  console.log(`   - baseUrl utilisé: ${baseUrl}`);
+  console.log(`   - texte avant (premiers 200 chars): ${text.substring(0, 200)}`);
+  console.log(`   - contient {BASE_URL}: ${text.includes('{BASE_URL}')}`);
+  
   let processedText = text
     .replace(/{BASE_URL}/g, baseUrl)
     .replace(/https:\/\/ai-bricks-analyst-production\.up\.railway\.app/g, baseUrl);
@@ -55,6 +67,9 @@ export const replaceUrlPlaceholders = (text: string, projectUniqueId?: string): 
   if (projectUniqueId) {
     processedText = processedText.replace(/{projectUniqueId}/g, projectUniqueId);
   }
+  
+  console.log(`   - texte après (premiers 200 chars): ${processedText.substring(0, 200)}`);
+  console.log(`   - contient encore {BASE_URL}: ${processedText.includes('{BASE_URL}')}`);
   
   return processedText;
 };
