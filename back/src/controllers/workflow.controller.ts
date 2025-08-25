@@ -30,6 +30,8 @@ import {
 } from '@/db/schema';
 import { createZipFromDocuments } from '@/lib/s3';
 import { getBaseUrl, replaceUrlPlaceholders } from '@/lib/url-utils';
+import { slackNotificationService } from '@/services/slack-notification.service';
+import { ErrorType, AlertPriority } from '@/config/slack.config';
 import { eq, and, asc, desc, or, sql } from 'drizzle-orm';
 import type { 
   CreateAnalysisStepInput,
@@ -125,6 +127,29 @@ const sendPromptToAI = async (prompt: string, projectUniqueId: string, stepId: n
     const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
     if (isTimeout && !isRetry) {
       console.log(`⏰ Timeout détecté pour l'étape ${stepName}, le système de retry prendra le relais`);
+    } else if (!isRetry) {
+      // 🚨 ALERTE 9 - Notification Slack pour erreur de connexion API IA (sauf si c'est un retry)
+      try {
+        await slackNotificationService.sendErrorNotification({
+          project: {
+            projectUniqueId: projectUniqueId,
+            projectName: 'Projet en cours d\'analyse'
+          },
+          workflow: {
+            stepId: stepId,
+            stepName: stepName,
+            stepOrder: stepId
+          },
+          error: {
+            errorType: ErrorType.AI_CONNECTION,
+            priority: AlertPriority.CRITICAL,
+            errorMessage: error.message || 'Erreur de connexion à l\'API Python',
+            errorCode: error.code
+          }
+        });
+      } catch (slackError) {
+        console.warn('⚠️ Erreur envoi notification Slack:', slackError);
+      }
     }
     
     return {
@@ -183,6 +208,32 @@ const handleWorkflowStepRetry = async (projectUniqueId: string, stepId: number):
 
     if (currentRetryCount >= maxRetries) {
       console.log(`❌ Nombre maximum de retries atteint (${currentRetryCount}/${maxRetries}) pour l'étape ${currentStep.name}`);
+      
+      // 🚨 ALERTE 3 - Notification Slack pour échec définitif après retries
+      try {
+        await slackNotificationService.sendErrorNotification({
+          project: {
+            projectUniqueId: projectUniqueId,
+            projectName: project[0].projectName,
+            projectUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/projects/${projectUniqueId}`
+          },
+          workflow: {
+            stepId: stepId,
+            stepName: currentStep.name,
+            stepOrder: currentStep.order,
+            retryCount: currentRetryCount,
+            maxRetries: maxRetries,
+            conversationUrl: currentWorkflow.manusConversationUrl || undefined
+          },
+          error: {
+            errorType: ErrorType.WORKFLOW_RETRY_EXHAUSTED,
+            priority: AlertPriority.CRITICAL,
+            errorMessage: `Échec définitif après ${currentRetryCount} tentatives. Timeout de 10 minutes dépassé à chaque fois.`
+          }
+        });
+      } catch (slackError) {
+        console.warn('⚠️ Erreur envoi notification Slack:', slackError);
+      }
       
       // Marquer comme définitivement échoué
       await db
@@ -2543,6 +2594,27 @@ export const uploadZipFromUrl = async (req: Request, res: Response): Promise<any
     }
     
     console.error(`🔍 Stack trace:`, error.stack);
+    
+    // 🚨 ALERTE 2 - Notification Slack pour erreur génération ZIP
+    try {
+      const projectUniqueId = req.body.projectUniqueId;
+      if (projectUniqueId) {
+        await slackNotificationService.sendErrorNotification({
+          project: {
+            projectUniqueId: projectUniqueId,
+            projectName: 'Projet en cours de traitement',
+            projectUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/projects/${projectUniqueId}`
+          },
+          error: {
+            errorType: ErrorType.ZIP_GENERATION,
+            priority: AlertPriority.CRITICAL,
+            errorMessage: error.message || 'Erreur lors de l\'upload ZIP'
+          }
+        });
+      }
+    } catch (slackError) {
+      console.warn('⚠️ Erreur envoi notification Slack:', slackError);
+    }
     
     res.status(500).json({
       error: error.message || 'Erreur lors de l\'upload ZIP',

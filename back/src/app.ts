@@ -11,6 +11,7 @@ import workflowRoutes from '@/routes/workflow.routes';
 import aiCredentialsRoutes from '@/routes/ai-credentials.routes';
 import apiConfigRoutes from '@/routes/api-config.routes';
 import aiConversationsRoutes from '@/routes/ai-conversations.routes';
+import slackTestRoutes from '@/routes/slack-test.routes';
 import { getCredentialByPlatformAndUserPublic } from '@/controllers/ai-credentials.controller';
 
 const app = express();
@@ -142,6 +143,7 @@ app.use('/api/workflow', workflowRoutes);
 app.use('/api/ai-credentials', aiCredentialsRoutes);
 app.use('/api/api-configs', apiConfigRoutes);
 app.use('/api/ai-conversations', aiConversationsRoutes);
+app.use('/api/slack', slackTestRoutes);
 
 // Route publique pour l'intégration externe (sécurisée par clé API)
 app.get('/api/public/ai-credentials/platform/:platform/user/:userIdentifier', getCredentialByPlatformAndUserPublic);

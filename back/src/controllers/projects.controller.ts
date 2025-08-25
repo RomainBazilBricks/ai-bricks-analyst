@@ -19,6 +19,8 @@ import {
 import { initiateWorkflowForProject, uploadZipFromUrl } from '@/controllers/workflow.controller';
 import { uploadFileFromUrl, s3Client, extractS3KeyFromUrl, extractS3KeyFromUrlRaw, generatePresignedUrlFromS3Url, downloadFileFromS3 } from '@/lib/s3';
 import { getPreprodUrl } from '@/lib/url-utils';
+import { slackNotificationService } from '@/services/slack-notification.service';
+import { ErrorType, AlertPriority } from '@/config/slack.config';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import type { 
   CreateProjectInput, 
@@ -330,6 +332,29 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
         } catch (error) {
           console.error(`❌ Erreur conversion S3 document ${index + 1}:`, error);
           
+          // 🚨 ALERTE 1 - Notification Slack pour erreur conversion S3
+          try {
+            await slackNotificationService.sendErrorNotification({
+              project: {
+                projectUniqueId: projectData.projectUniqueId,
+                projectName: projectData.projectName,
+                projectUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/projects/${projectData.projectUniqueId}`
+              },
+              error: {
+                errorType: ErrorType.DOCUMENT_UPLOAD,
+                priority: AlertPriority.HIGH,
+                errorMessage: (error as Error).message,
+                additionalData: {
+                  documentIndex: index + 1,
+                  totalDocuments: projectData.fileUrls.length,
+                  bubbleUrl: bubbleUrl
+                }
+              }
+            });
+          } catch (slackError) {
+            console.warn('⚠️ Erreur envoi notification Slack:', slackError);
+          }
+          
           // En cas d'erreur, stocker l'URL Bubble nettoyée avec statut ERROR
           const errorHash = `error-${Date.now()}-${index}`;
           
@@ -420,6 +445,25 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
     
   } catch (error) {
     console.error('Error creating project:', error);
+    
+    // 🚨 Notification Slack pour erreur critique de création projet
+    try {
+      await slackNotificationService.sendErrorNotification({
+        project: {
+          projectUniqueId: req.body.projectUniqueId || req.body.project_bubble_uniqueId || 'UNKNOWN',
+          projectName: req.body.projectName || 'Projet inconnu'
+        },
+        error: {
+          errorType: ErrorType.PROJECT_CREATION,
+          priority: AlertPriority.CRITICAL,
+          errorMessage: (error as Error).message,
+          errorCode: error instanceof Error && error.name === 'ZodError' ? 'VALIDATION_ERROR' : 
+                    error instanceof SyntaxError ? 'JSON_PARSE_ERROR' : 'PROJECT_CREATION_ERROR'
+        }
+      });
+    } catch (slackError) {
+      console.warn('⚠️ Erreur envoi notification Slack:', slackError);
+    }
     
     // Gestion spécifique des erreurs de validation Zod
     if (error instanceof Error && error.name === 'ZodError') {
