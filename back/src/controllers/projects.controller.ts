@@ -93,24 +93,36 @@ export const createProject = async (req: Request, res: Response): Promise<any> =
       }
     }
 
+    /**
+     * Nettoie et sécurise le contenu textuel en supprimant les caractères problématiques
+     * @param text Texte à nettoyer
+     * @returns Texte nettoyé et sécurisé
+     */
+    function cleanTextContent(text: string | undefined): string | undefined {
+      if (!text) return undefined;
+      
+      return String(text)
+        // Supprimer les caractères de contrôle problématiques (garder \n, \r, \t)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+        // Normaliser les espaces multiples
+        .replace(/\s+/g, ' ')
+        // Supprimer les espaces en début/fin
+        .trim();
+    }
+
     // Normaliser les noms de champs Bubble vers les noms standards
     const normalizedBody = {
       ...req.body,
       // Normaliser les champs Bubble
       projectUniqueId: req.body.projectUniqueId || req.body.project_bubble_uniqueId,
       fileUrls: req.body.fileUrls || req.body.filesUrls,
-      // Nettoyer le champ conversations s'il existe
-      conversations: req.body.conversations ? 
-        String(req.body.conversations).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
-        undefined,
-      // Nettoyer le champ conversation s'il existe  
-      conversation: req.body.conversation ? 
-        String(req.body.conversation).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
-        undefined,
-      // Nettoyer le champ fiche s'il existe
-      fiche: req.body.fiche ? 
-        String(req.body.fiche).replace(/[\x00-\x1F\x7F]/g, ' ').trim() : 
-        undefined,
+      // Nettoyer les champs texte avec la fonction améliorée
+      conversations: cleanTextContent(req.body.conversations),
+      conversation: cleanTextContent(req.body.conversation),
+      fiche: cleanTextContent(req.body.fiche),
+      // Nettoyer aussi les autres champs texte potentiels
+      projectName: cleanTextContent(req.body.projectName),
+      description: cleanTextContent(req.body.description),
     };
 
     // Nettoyer les URLs des fichiers

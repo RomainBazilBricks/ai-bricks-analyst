@@ -36,8 +36,43 @@ app.use((req, res, next) => {
     
     req.on('end', () => {
       try {
-        // Nettoyer les caractères de contrôle problématiques
-        let cleanedBody = body.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+        // Fonction pour nettoyer et échapper le contenu JSON
+        function cleanJsonContent(content: string): string {
+          // 1. Nettoyer les caractères de contrôle problématiques (sauf \n, \r, \t)
+          let cleaned = content.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+          
+          // 2. Échapper les caractères spéciaux dans les valeurs de chaînes
+          // Remplacer les caractères qui peuvent casser le JSON
+          cleaned = cleaned.replace(/\\/g, '\\\\'); // Échapper les backslashes
+          cleaned = cleaned.replace(/"/g, '\\"'); // Échapper les guillemets dans les valeurs
+          cleaned = cleaned.replace(/\n/g, '\\n'); // Échapper les retours à la ligne
+          cleaned = cleaned.replace(/\r/g, '\\r'); // Échapper les retours chariot
+          cleaned = cleaned.replace(/\t/g, '\\t'); // Échapper les tabulations
+          
+          return cleaned;
+        }
+        
+        // Nettoyer le contenu JSON de manière plus robuste
+        let cleanedBody = body;
+        
+        // Identifier et nettoyer le contenu des chaînes JSON
+        cleanedBody = cleanedBody.replace(/"([^"]*(?:\\.[^"]*)*)"/g, (match, content) => {
+          // Ne pas nettoyer les clés JSON (qui sont courtes et sans caractères spéciaux)
+          if (content.length < 50 && !/[[\]{}()]/.test(content)) {
+            return match; // Garder les clés telles quelles
+          }
+          
+          // Nettoyer le contenu des valeurs longues
+          const cleaned = content
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ') // Supprimer les caractères de contrôle
+            .replace(/\\/g, '\\\\') // Échapper les backslashes
+            .replace(/"/g, '\\"') // Échapper les guillemets
+            .replace(/\n/g, '\\n') // Échapper les retours à la ligne
+            .replace(/\r/g, '\\r') // Échapper les retours chariot
+            .replace(/\t/g, '\\t'); // Échapper les tabulations
+          
+          return `"${cleaned}"`;
+        });
         
         // Corrections multiples pour les erreurs JSON communes de Bubble
         
@@ -63,7 +98,13 @@ app.use((req, res, next) => {
       } catch (error) {
         console.error('❌ Erreur parsing JSON même après nettoyage:', error);
         console.error('❌ Contenu problématique (premiers 1000 chars):', body.substring(0, 1000));
-        console.error('❌ Contenu autour de la position d\'erreur:', body.substring(Math.max(0, 13241 - 200), 13241 + 200));
+        
+        // Extraire la position d'erreur du message d'erreur
+        const errorMessage = (error as Error).message;
+        const positionMatch = errorMessage.match(/position (\d+)/);
+        const errorPosition = positionMatch ? parseInt(positionMatch[1]) : 0;
+        
+        console.error('❌ Contenu autour de la position d\'erreur:', body.substring(Math.max(0, errorPosition - 200), errorPosition + 200));
         return res.status(400).json({
           error: 'Format JSON invalide',
           details: (error as Error).message,
