@@ -7,12 +7,12 @@ import {
   deleteAiCredential,
   getCredentialByPlatformAndUser
 } from '../controllers/ai-credentials.controller';
-import { authenticateJWT } from '../middlewares/auth.middleware';
+import { authenticateJWT, requireAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Routes protégées par authentification JWT
-router.use(authenticateJWT);
+// Routes protégées par authentification JWT et autorisation admin
+router.use(authenticateJWT, requireAdmin);
 
 // GET /api/ai-credentials - Liste tous les credentials avec pagination
 router.get('/', getPaginatedAiCredentials);

@@ -8,12 +8,12 @@ import {
   deleteApiConfig,
   updatePythonApiConfig
 } from '../controllers/api-config.controller';
-import { authenticateJWT } from '../middlewares/auth.middleware';
+import { authenticateJWT, requireAdmin } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// Toutes les routes nécessitent une authentification
-router.use(authenticateJWT);
+// Toutes les routes nécessitent une authentification et autorisation admin
+router.use(authenticateJWT, requireAdmin);
 
 /**
  * @route GET /api/api-configs

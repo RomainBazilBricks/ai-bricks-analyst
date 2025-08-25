@@ -4,8 +4,12 @@ import {
   getAIConversationsByProject,
   getLatestAIConversation
 } from '@/controllers/ai-conversations.controller';
+import { authenticateJWT, requireAdmin } from '@/middlewares/auth.middleware';
 
 const router = express.Router();
+
+// Appliquer l'authentification et l'autorisation admin à toutes les routes
+router.use(authenticateJWT, requireAdmin);
 
 /**
  * Sauvegarde une URL de conversation IA liée à un projet

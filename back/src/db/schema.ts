@@ -42,6 +42,11 @@ export enum StrengthWeaknessType {
   WEAKNESS = 'weakness',
 }
 
+export enum UserRole {
+  USER = 'user',
+  ADMIN = 'admin',
+}
+
 export enum ProjectTypology {
   MARCHAND_DE_BIEN = 'marchand_de_bien',
   PROJET_LOCATIF = 'projet_locatif',
@@ -60,6 +65,7 @@ export const fileStatusEnum = pgEnum('file_status', ['UPLOADED', 'PROCESSED', 'E
 export const documentStatusEnum = pgEnum('document_status', ['pending', 'resolved', 'irrelevant']);
 export const riskLevelEnum = pgEnum('risk_level', ['low', 'medium', 'high']);
 export const strengthWeaknessTypeEnum = pgEnum('strength_weakness_type', ['strength', 'weakness']);
+export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
 export const projectTypologyEnum = pgEnum('project_typology', ['marchand_de_bien', 'projet_locatif', 'projet_exploitation', 'promotion_immobiliere']);
 
 // Users Table - Represents administrators
@@ -68,6 +74,7 @@ export const users = pgTable('users', {
   name: varchar('name', { length: 256 }).notNull(),
   email: text('email').notNull(),
   password: text('password').notNull(),
+  role: userRoleEnum('role').notNull().default('user'),
 });
 
 // Projects Table - Represents an investment project or dossier

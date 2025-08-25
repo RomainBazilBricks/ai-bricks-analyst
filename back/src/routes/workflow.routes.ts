@@ -19,14 +19,18 @@ import {
   testPromptProcessing,
   receiveStrengthsAndWeaknesses,
   receiveFinalMessage,
+  retryReformulation,
   uploadZipFromUrl,
   generateZipOnly,
   triggerStep1Analysis,
   retryWorkflowStep
 } from '@/controllers/workflow.controller';
-import { authenticateJWT } from '@/middlewares/auth.middleware';
+import { authenticateJWT, requireAdmin } from '@/middlewares/auth.middleware';
 
 const router = express.Router();
+
+// Appliquer l'authentification et l'autorisation admin à toutes les routes
+router.use(authenticateJWT, requireAdmin);
 
 /**
  * Routes pour la gestion des étapes d'analyse
@@ -39,7 +43,7 @@ const router = express.Router();
  * @returns {AnalysisStepResponse} Étape d'analyse créée
  * @access Private (authentification requise)
  */
-router.post('/steps', authenticateJWT, createAnalysisStep);
+router.post('/steps', createAnalysisStep);
 
 /**
  * Récupère toutes les étapes d'analyse actives
@@ -56,7 +60,7 @@ router.get('/steps', getAllAnalysisSteps);
  * @returns {AnalysisStepResponse} Étape d'analyse mise à jour
  * @access Private (authentification requise)
  */
-router.put('/steps/:id', authenticateJWT, updateAnalysisStepDefinition);
+router.put('/steps/:id', updateAnalysisStepDefinition);
 
 /**
  * Routes pour la gestion du workflow de projet
@@ -69,7 +73,7 @@ router.put('/steps/:id', authenticateJWT, updateAnalysisStepDefinition);
  * @returns {Object} Message de confirmation et détails
  * @access Private (authentification requise)
  */
-router.post('/initiate', authenticateJWT, initiateWorkflow);
+router.post('/initiate', initiateWorkflow);
 
 /**
  * Récupère le statut du workflow d'analyse pour un projet
@@ -87,7 +91,7 @@ router.get('/status/:projectUniqueId', getWorkflowStatus);
  * @returns {Object} Message de confirmation et détails de l'étape
  * @access Private (authentification requise)
  */
-router.post('/update-step', authenticateJWT, updateWorkflowStep);
+router.post('/update-step', updateWorkflowStep);
 
 /**
  * Endpoints spécifiques pour chaque étape (appelés par Manus)
@@ -208,6 +212,14 @@ router.post('/strengths-and-weaknesses/:projectUniqueId', receiveStrengthsAndWea
 router.post('/final-message/:projectUniqueId', receiveFinalMessage);
 
 /**
+ * Endpoint pour relancer la reformulation GPT-4o d'un message existant
+ * @route POST /api/workflow/retry-reformulation/:projectUniqueId
+ * @returns {Object} Confirmation de la reformulation
+ * @access Public (pour interface)
+ */
+router.post('/retry-reformulation/:projectUniqueId', retryReformulation);
+
+/**
  * Endpoint de test pour voir comment les placeholders sont remplacés
  * @route GET /api/workflow/test-prompt/:projectUniqueId
  * @param {string} prompt - Prompt à tester (en query parameter)
@@ -253,6 +265,6 @@ router.post('/trigger-step-1/:projectUniqueId', triggerStep1Analysis);
  * @returns {Object} Confirmation du retry
  * @access Private (authentifié)
  */
-router.post('/retry-step', authenticateJWT, retryWorkflowStep);
+router.post('/retry-step', retryWorkflowStep);
 
 export default router; 

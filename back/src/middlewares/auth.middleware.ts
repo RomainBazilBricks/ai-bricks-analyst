@@ -22,4 +22,18 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
   } catch (error) {
     res.status(401).json({ error: 'Token invalide', code: 'INVALID_TOKEN' });
   }
+};
+
+export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentification requise', code: 'NO_AUTH' });
+    return;
+  }
+  
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Accès réservé aux administrateurs', code: 'ADMIN_REQUIRED' });
+    return;
+  }
+  
+  next();
 }; 

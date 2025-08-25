@@ -9,8 +9,12 @@ import {
   testAllAlerts, 
   testSpecificAlert 
 } from '@/controllers/slack-test.controller';
+import { authenticateJWT, requireAdmin } from '@/middlewares/auth.middleware';
 
 const router = Router();
+
+// Appliquer l'authentification et l'autorisation admin à toutes les routes
+router.use(authenticateJWT, requireAdmin);
 
 /**
  * @route GET /api/slack/test-connection

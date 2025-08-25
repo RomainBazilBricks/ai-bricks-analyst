@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useGetProjectConversations, useCreateDraft, type ConversationMessage } from "@/api/conversations";
 import { useRetryStep } from "@/api/external-tools";
+import { useRetryReformulation } from "@/api/reformulation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -16,7 +17,8 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
-  RefreshCw
+  RefreshCw,
+  Eye
 
 } from "lucide-react";
 import { queryClient } from "@/api/query-config";
@@ -145,26 +147,34 @@ const markdownToHtml = (markdown: string) => {
 };
 
 const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: string; conversations?: ConversationMessage[] }) => {
-  // Récupérer le dernier message de l'IA comme draft par défaut
-  const latestDraft = conversations?.find(conv => 
+  // Récupérer le message reformulé et le message original
+  const reformulatedMessage = conversations?.find(conv => 
+    conv.sender === 'IA_REFORMULATED'
+  );
+  const originalMessage = conversations?.find(conv => 
     conv.sender === 'IA'
   );
 
+  // Utiliser le message reformulé en priorité, sinon le message original
+  const latestDraft = reformulatedMessage || originalMessage;
+  
   const [draftMessage, setDraftMessage] = useState('');
   const [hasInitialized, setHasInitialized] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
 
-  // Mettre à jour le draft quand les conversations changent
+  // Mettre à jour le draft quand les conversations changent ou quand on bascule entre original/reformulé
   React.useEffect(() => {
-    if (latestDraft && !hasInitialized) {
-      const htmlContent = markdownToHtml(latestDraft.message);
+    const messageToShow = showOriginal ? originalMessage : latestDraft;
+    if (messageToShow && (!hasInitialized || showOriginal !== undefined)) {
+      const htmlContent = markdownToHtml(messageToShow.message);
       if (typeof htmlContent === 'string') {
         setDraftMessage(htmlContent);
       } else {
         htmlContent.then((html) => setDraftMessage(html));
       }
-      setHasInitialized(true);
+      if (!hasInitialized) setHasInitialized(true);
     }
-  }, [latestDraft, hasInitialized]);
+  }, [latestDraft, originalMessage, showOriginal, hasInitialized]);
 
 
 
@@ -201,6 +211,19 @@ const MessageDraft = ({ projectUniqueId, conversations }: { projectUniqueId: str
 
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
+          {/* Bouton discret pour voir le message original */}
+          {reformulatedMessage && originalMessage && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowOriginal(!showOriginal)}
+              className="h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+              title={showOriginal ? "Voir la version reformulée" : "Voir le message original"}
+            >
+              <Eye className="h-3 w-3 mr-1" />
+              {showOriginal ? "Version reformulée" : "Message original"}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" className="h-8 text-xs">
@@ -240,6 +263,21 @@ export const ProjectConversations = ({ projectUniqueId, latestConversationUrl }:
       },
       onError: (error) => {
         console.error('❌ Erreur lors du relancement de l\'étape 5:', error);
+      }
+    }
+  );
+
+  // ✅ Hook pour relancer la reformulation GPT-4o
+  const { mutateAsync: retryReformulation, isPending: isRetryingReformulation } = useRetryReformulation(
+    projectUniqueId,
+    {
+      onSuccess: () => {
+        console.log('✅ Reformulation GPT-4o relancée avec succès');
+        // Invalider les caches pour rafraîchir les données
+        queryClient.invalidateQueries({ queryKey: ["conversations", projectUniqueId] });
+      },
+      onError: (error: any) => {
+        console.error('❌ Erreur lors du relancement de la reformulation:', error);
       }
     }
   );
@@ -318,6 +356,20 @@ export const ProjectConversations = ({ projectUniqueId, latestConversationUrl }:
                 <RefreshCw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
                 <span className="hidden md:inline">{isRetrying ? 'Relance...' : 'Relancer'}</span>
               </Button>
+              {/* ✅ Bouton Relancer la reformulation - Version discrète */}
+              {conversations?.some(conv => conv.sender === 'IA') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => retryReformulation(undefined)}
+                  disabled={isRetryingReformulation}
+                  className="flex items-center gap-1 h-7 px-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 opacity-60 hover:opacity-100 transition-all"
+                  title="Relancer la reformulation GPT-4o"
+                >
+                  <RefreshCw className={`h-3 w-3 ${isRetryingReformulation ? 'animate-spin' : ''}`} />
+                  <span className="hidden md:inline">{isRetryingReformulation ? 'Reformule...' : 'Relancer reformulation'}</span>
+                </Button>
+              )}
             </div>
             {conversations?.some(conv => conv.sender === 'IA') && (
               <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">

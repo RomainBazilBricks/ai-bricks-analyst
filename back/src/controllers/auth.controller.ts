@@ -27,7 +27,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({ error: 'Mot de passe invalide', code: 'INVALID_PASSWORD' });
       return;
     }
-    const payload: AuthUser = { id: user[0].id, email: user[0].email, name: user[0].name };
+    const payload: AuthUser = { id: user[0].id, email: user[0].email, name: user[0].name, role: user[0].role };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
     const response: AuthResponse = { token, user: payload };
     res.json(response);
@@ -58,7 +58,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
     const hashed = await bcrypt.hash(password, 10);
     const [created] = await db.insert(users).values({ name, email, password: hashed }).returning();
-    const user: AuthUser = { id: created.id, email: created.email, name: created.name };
+    const user: AuthUser = { id: created.id, email: created.email, name: created.name, role: created.role };
     const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
     const response: CreateAccountResponse = { user, token };
     res.status(201).json(response);

@@ -1,7 +1,10 @@
+export type UserRole = 'user' | 'admin';
+
 export type User = {
     id: number;
     name: string | null;
     email: string | null;
+    role: UserRole;
 };
 
 export type CreateUserInput = {
@@ -13,4 +16,5 @@ export type UserResponse = {
     id: number;
     name: string;
     email: string;
+    role: UserRole;
 };

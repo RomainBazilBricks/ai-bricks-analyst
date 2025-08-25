@@ -14,3 +14,4 @@ export * from './prompts';
 export * from './prompts-wrapper';
 export * from './ai-credentials';
 export * from './api-config';
+export * from './openrouter-test';

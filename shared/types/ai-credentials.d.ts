@@ -2,7 +2,7 @@
  * Types pour les credentials des plateformes IA
  */
 
-export type AiPlatform = 'chatgpt' | 'claude' | 'manus' | 'perplexity' | 'gemini' | 'mistral';
+export type AiPlatform = 'chatgpt' | 'claude' | 'manus' | 'perplexity' | 'gemini' | 'mistral' | 'openrouter';
 
 export type AiCredential = {
   id: number;
@@ -117,5 +117,12 @@ export type MistralSessionData = {
   api_key: string;
   organization_id?: string;
   cookies?: Record<string, string>;
+  headers?: Record<string, string>;
+};
+
+export type OpenRouterSessionData = {
+  api_key: string;
+  site_url?: string;
+  app_name?: string;
   headers?: Record<string, string>;
 }; 

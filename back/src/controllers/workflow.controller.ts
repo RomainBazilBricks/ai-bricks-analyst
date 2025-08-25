@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
 import { db } from '@/db/index';
+import { openRouterService } from '../services/openrouter.service';
 import { 
   projects, 
   analysis_steps, 
@@ -2143,7 +2144,7 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
     }
 
     // Créer le nouveau message (que ce soit en mode draft ou nouveau)
-    await db
+    const insertedMessage = await db
       .insert(conversations)
       .values({
         sessionId: recentSession[0].id,
@@ -2151,9 +2152,89 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
         sender: 'IA',
         message: validatedData.message,
         attachments: [],
-      });
+      })
+      .returning();
 
     console.log(`✅ ${isDraftMode ? 'Message draft mis à jour' : 'Nouveau message créé'} pour le projet ${projectUniqueId}`);
+
+    // 🚀 NOUVEAU : Appel OpenRouter GPT-4o pour reformuler le message
+    try {
+      console.log(`🤖 Démarrage de la reformulation GPT-4o pour le projet ${projectUniqueId}...`);
+      
+      const reformulationPrompt = `Prompt pour reformuler le message d’un Account Manager de Bricks.co
+Vous êtes un Account Manager chez Bricks.co, une plateforme spécialisée dans le financement immobilier. Votre tâche est de reformuler le message initial fourni pour produire uniquement le message final, sans explications ni contexte supplémentaire, en le rendant plus clair, structuré et professionnel. Le message doit refléter l’analyse objective de l’équipe d’analyse de Bricks.co, en évitant des formulations personnelles comme « si j’ai bien compris » ou « voici ce que j’en pense », et en utilisant des expressions telles que « selon l’analyse de l’équipe » ou « l’équipe d’analyse a relevé ». Aucun émoji ne doit être utilisé dans le message.
+Instructions spécifiques :
+
+Contenu : Produisez uniquement le message reformulé, sans inclure d’instructions, de contexte ou d’explications supplémentaires.
+Structure Markdown : Utilisez un format Markdown avec des sections clairement délimitées (titres avec # ou ##, listes à puces avec - ou *, paragraphes courts) pour une lisibilité optimale.
+Contexte du projet : Résumez de manière concise et factuelle les détails du projet immobilier (type d’opération, localisation, montant d’acquisition, travaux prévus, estimation de revente, demande de financement).
+Points forts du profil : Présentez les atouts du client (expérience, track record, patrimoine, rentabilité prévisionnelle) sous forme de liste à puces, en soulignant leur pertinence pour le projet.
+Points de vigilance : Listez les préoccupations identifiées par l’analyse sous forme de liste à puces, avec une explication claire de chaque point et de son impact potentiel.
+Documents requis : Détaillez les documents manquants nécessaires pour avancer dans l’analyse, en utilisant des listes à puces, avec une justification de leur importance pour l’évaluation du dossier.
+Questions spécifiques : Formulez des questions précises pour clarifier les points critiques (par exemple, nature d’un litige, raisons de la confidentialité des comptes, faisabilité des délais), sous forme de liste à puces.
+Confirmation des informations : Demandez une confirmation des données clés (patrimoine, revenus, nombre d’opérations, estimation de revente) avec une invitation à corriger ou préciser si nécessaire, sous forme de liste ou de paragraphe clair.
+Conclusion : Concluez en réaffirmant les atouts du projet, en indiquant que la fourniture des documents et clarifications permettra de passer en comité de financement, et en terminant par la phrase exacte : « Dès que nous aurons tous les documents, nous pourrons envoyer ton dossier en comité et planifier la collecte. »
+Ton et style : Adoptez un ton professionnel, courtois et objectif, en évitant tout jugement personnel et en mettant en avant les conclusions de l’équipe d’analyse.
+
+Message initial à reformuler :
+Bonjour Nicolas,
+Nous avons procédé à l'analyse complète de ton projet de rénovation au 48 Avenue du Bois d'Amour à La Baule. Il s'agit d'une opération de marchand de biens portant sur une maison de 95m² acquise 456 000€ en septembre 2022, avec 200 000€ de travaux prévus pour une revente estimée à 1 200 000€. Tu sollicites un financement de 775 000€ pour refinancer la dette existante (625 000€) et financer les travaux restants (150 000€).
+Ton profil présente des atouts solides : 20 ans d'expérience dans l'immobilier, un track record de 50 opérations depuis 2018 dont 13 à La Baule, et un patrimoine personnel de 4M€ nets. La localisation du bien est premium avec une rentabilité prévisionnelle attractive de 18%.
+Cependant, notre analyse révèle plusieurs points de vigilance qui nécessitent des clarifications avant passage en comité de financement.
+Documents manquants requis :
+• Comptes annuels SASU Aspen Promotion 2022-2023 : Les bilans et comptes de résultat sont essentiels pour évaluer la santé financière de ta société, sa capacité de remboursement et sa solvabilité. Les comptes 2023 étant sous confidentialité partielle, nous avons besoin des données complètes.
+• Jugement Cour d'appel de Rennes du 22 décembre 2023 (réf. 23/02947) : Un contentieux récent impliquant SASU Aspen Promotion a été identifié. Nous devons comprendre la nature de ce litige et son impact financier potentiel pour évaluer le risque juridique.
+• Expertise immobilière indépendante post-travaux : L'estimation de revente à 1,2M€ doit être validée par un expert agréé pour confirmer la marge prévisionnelle et sécuriser la rentabilité du projet.
+• Contrat de prêt bancaire initial de 625 000€ : Nous avons besoin des conditions détaillées du prêt existant (taux, échéances, garanties) pour comprendre la situation actuelle et valider la pertinence du refinancement.
+• Déclaration de patrimoine détaillée : Le patrimoine personnel de 4M€ nets doit être documenté pour valider la capacité de garantie personnelle et vérifier la solidité des garanties offertes.
+• Planning détaillé des travaux avec coordination des corps d'état : Les travaux complexes (électricité, plomberie, PAC, menuiseries) nécessitent un planning précis pour évaluer la faisabilité du délai de 12 mois et identifier les risques de retard.
+• Contrats signés avec les entreprises de travaux : Les contrats définitifs sécurisent les prix et délais, évitent les dépassements budgétaires et garantissent l'engagement ferme des artisans.
+• Polices d'assurance décennale des entreprises de travaux : Ces garanties sont indispensables pour sécuriser la réalisation des travaux et protéger l'investissement contre les malfaçons.
+• Acte de cautionnement HOLDING NGBFINANCES : La garantie à première demande de ta holding doit être formalisée juridiquement pour sécuriser cet engagement.
+Points de vigilance critiques :
+Le contentieux de décembre 2023 constitue notre préoccupation principale. Peux-tu nous expliquer la nature de ce litige et son impact sur ton activité ?
+La confidentialité des comptes 2023 limite notre évaluation du risque crédit. Quelles sont les raisons de cette confidentialité et peux-tu nous fournir les données financières complètes ?
+Le délai de 12 mois pour les travaux nous semble optimiste compte tenu de leur complexité. As-tu déjà coordonné des chantiers similaires dans ces délais ?
+Confirmation des informations :
+Peux-tu confirmer les données suivantes : patrimoine personnel 4M€ nets, revenus locatifs 300K€/an, 50 opérations réalisées depuis 2018, estimation de revente 1,2M€ ? Y a-t-il des éléments à corriger ou préciser ?
+Une fois ces documents fournis et ces points clarifiés, nous pourrons finaliser notre analyse et présenter ton dossier en comité de financement. La qualité de ta localisation et ton expérience opérationnelle constituent des atouts solides pour ce projet.
+Peux-tu nous transmettre ces éléments dans les meilleurs délais ?
+Cordialement, L'équipe d'analyse Bricks.co
+
+Résultat attendu : Un message reformulé, structuré en Markdown, contenant uniquement le message final sans explications ni contexte supplémentaire, reprenant toutes les informations du message initial de manière organisée, avec des sections claires pour le contexte, les points forts, les points de vigilance, les documents requis, les questions spécifiques, la confirmation des informations et la conclusion. Le message doit se terminer par la phrase : « Dès que nous aurons tous les documents, nous pourrons envoyer ton dossier en comité et planifier la collecte. » Aucun émoji ne doit être inclus.`;
+      
+      const systemPrompt = `Tu es un expert en communication professionnelle. Ta mission est de reformuler des messages d'analyse pour les rendre plus clairs, structurés et professionnels tout en conservant toutes les informations importantes.`;
+
+      const gpt4oResponse = await openRouterService.callGPT4o(
+        `${reformulationPrompt}\n\nMessage à reformuler :\n${validatedData.message}`,
+        {
+          systemPrompt,
+          temperature: 0.3,
+          max_tokens: 2000
+        }
+      );
+
+      if (gpt4oResponse.success && gpt4oResponse.response) {
+        // Stocker la version reformulée dans la base de données
+        await db
+          .insert(conversations)
+          .values({
+            sessionId: recentSession[0].id,
+            sessionDate: new Date(),
+            sender: 'IA_REFORMULATED',
+            message: gpt4oResponse.response,
+            attachments: [],
+          });
+
+        console.log(`✅ Message reformulé par GPT-4o créé pour le projet ${projectUniqueId}`);
+        console.log(`📊 Tokens utilisés: ${gpt4oResponse.usage?.total_tokens || 'N/A'}`);
+      } else {
+        console.error(`❌ Erreur lors de la reformulation GPT-4o: ${gpt4oResponse.error}`);
+      }
+    } catch (error) {
+      console.error(`❌ Erreur critique lors de l'appel OpenRouter GPT-4o:`, error);
+      // Ne pas faire échouer l'endpoint principal si la reformulation échoue
+    }
 
     // Utiliser l'étape d'analyse déjà récupérée plus haut (analysisStep)
     if (analysisStep.length === 0) {
@@ -2200,6 +2281,129 @@ export const receiveFinalMessage = async (req: Request, res: Response): Promise<
     res.status(500).json({ 
       error: (error as Error).message,
       code: 'RECEIVE_FINAL_MESSAGE_ERROR'
+    });
+  }
+};
+
+/**
+ * Endpoint pour relancer la reformulation GPT-4o d'un message existant
+ * @route POST /api/workflow/retry-reformulation/:projectUniqueId
+ */
+export const retryReformulation = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { projectUniqueId } = req.params;
+
+    const project = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.projectUniqueId, projectUniqueId))
+      .limit(1);
+
+    if (project.length === 0) {
+      return res.status(404).json({ 
+        error: 'Projet non trouvé',
+        code: 'PROJECT_NOT_FOUND'
+      });
+    }
+
+    // Récupérer la session la plus récente du projet
+    const recentSession = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.projectId, project[0].id))
+      .orderBy(desc(sessions.createdAt))
+      .limit(1);
+
+    if (recentSession.length === 0) {
+      return res.status(404).json({ 
+        error: 'Aucune session trouvée pour ce projet',
+        code: 'SESSION_NOT_FOUND'
+      });
+    }
+
+    // Récupérer le message original de l'IA
+    const originalMessage = await db
+      .select()
+      .from(conversations)
+      .where(and(
+        eq(conversations.sessionId, recentSession[0].id),
+        eq(conversations.sender, 'IA')
+      ))
+      .orderBy(desc(conversations.sessionDate))
+      .limit(1);
+
+    if (originalMessage.length === 0) {
+      return res.status(404).json({ 
+        error: 'Aucun message original trouvé à reformuler',
+        code: 'ORIGINAL_MESSAGE_NOT_FOUND'
+      });
+    }
+
+    console.log(`🔄 Relancement de la reformulation GPT-4o pour le projet ${projectUniqueId}...`);
+
+    // Supprimer l'ancienne version reformulée s'il y en a une
+    await db
+      .delete(conversations)
+      .where(and(
+        eq(conversations.sessionId, recentSession[0].id),
+        eq(conversations.sender, 'IA_REFORMULATED')
+      ));
+
+    // Appel OpenRouter GPT-4o pour reformuler le message
+    try {
+      const reformulationPrompt = `PROMPT A COMPLETER`;
+      
+      const systemPrompt = `Tu es un expert en communication professionnelle. Ta mission est de reformuler des messages d'analyse pour les rendre plus clairs, structurés et professionnels tout en conservant toutes les informations importantes.`;
+
+      const gpt4oResponse = await openRouterService.callGPT4o(
+        `${reformulationPrompt}\n\nMessage à reformuler :\n${originalMessage[0].message}`,
+        {
+          systemPrompt,
+          temperature: 0.3,
+          max_tokens: 2000
+        }
+      );
+
+      if (gpt4oResponse.success && gpt4oResponse.response) {
+        // Stocker la nouvelle version reformulée
+        await db
+          .insert(conversations)
+          .values({
+            sessionId: recentSession[0].id,
+            sessionDate: new Date(),
+            sender: 'IA_REFORMULATED',
+            message: gpt4oResponse.response,
+            attachments: [],
+          });
+
+        console.log(`✅ Reformulation GPT-4o relancée avec succès pour le projet ${projectUniqueId}`);
+        console.log(`📊 Tokens utilisés: ${gpt4oResponse.usage?.total_tokens || 'N/A'}`);
+
+        res.status(200).json({
+          success: true,
+          message: 'Reformulation GPT-4o relancée avec succès',
+          tokensUsed: gpt4oResponse.usage?.total_tokens || 0
+        });
+      } else {
+        console.error(`❌ Erreur lors de la reformulation GPT-4o: ${gpt4oResponse.error}`);
+        res.status(400).json({
+          success: false,
+          error: `Erreur lors de la reformulation: ${gpt4oResponse.error}`,
+          code: 'REFORMULATION_FAILED'
+        });
+      }
+    } catch (error) {
+      console.error(`❌ Erreur critique lors de l'appel OpenRouter GPT-4o:`, error);
+      res.status(500).json({
+        success: false,
+        error: 'Erreur critique lors de la reformulation',
+        code: 'REFORMULATION_CRITICAL_ERROR'
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ 
+      error: (error as Error).message,
+      code: 'RETRY_REFORMULATION_ERROR'
     });
   }
 };
