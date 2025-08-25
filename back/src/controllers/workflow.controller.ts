@@ -1158,46 +1158,88 @@ export const receiveReputationAnalysis = async (req: Request, res: Response): Pr
       }
     }
 
-    // Traiter les sociétés
+    // Traiter les sociétés avec pattern UPSERT robuste
     const createdCompanies = [];
     for (const company of validatedData.reputationAnalysis.companies) {
-      // Vérifier si la société existe déjà
-      const existingCompany = await db
-        .select()
-        .from(companies)
-        .where(and(
-          eq(companies.projectId, project[0].id),
-          eq(companies.name, company.name)
-        ))
-        .limit(1);
+      try {
+        console.log(`🏢 Traitement société: ${company.name} (SIRET: ${company.siret || 'non fourni'})`);
+        
+        // Pattern UPSERT robuste : tentative d'insertion d'abord, puis mise à jour si conflit
+        let result;
+        
+        try {
+          // Tentative d'insertion directe
+          result = await db
+            .insert(companies)
+            .values({
+              projectId: project[0].id,
+              name: company.name,
+              siret: company.siret || null,
+              reputationScore: company.reputationScore,
+              reputationJustification: company.reputationJustification,
+            })
+            .returning();
+          
+          console.log(`✅ Société créée: ${company.name}`);
+          createdCompanies.push(result[0]);
+          
+        } catch (insertError: any) {
+          console.log(`🔄 Conflit détecté pour ${company.name}, tentative de mise à jour...`);
+          
+          // En cas de conflit, chercher et mettre à jour la société existante
+          const existingCompany = await db
+            .select()
+            .from(companies)
+            .where(and(
+              eq(companies.projectId, project[0].id),
+              eq(companies.name, company.name)
+            ))
+            .limit(1);
 
-      if (existingCompany.length > 0) {
-        // Mettre à jour la société existante
-        const updatedCompany = await db
-          .update(companies)
-          .set({
-            reputationScore: company.reputationScore,
-            reputationJustification: company.reputationJustification,
-            ...(company.siret && { siret: company.siret }),
-          })
-          .where(eq(companies.id, existingCompany[0].id))
-          .returning();
+          if (existingCompany.length > 0) {
+            // Mise à jour de la société existante
+            const updateData: any = {
+              reputationScore: company.reputationScore,
+              reputationJustification: company.reputationJustification,
+            };
+            
+            // Mise à jour du SIRET seulement si fourni et différent
+            if (company.siret && company.siret !== existingCompany[0].siret) {
+              updateData.siret = company.siret;
+            }
+            
+            result = await db
+              .update(companies)
+              .set(updateData)
+              .where(eq(companies.id, existingCompany[0].id))
+              .returning();
+            
+            console.log(`✅ Société mise à jour: ${company.name}`);
+            createdCompanies.push(result[0]);
+          } else {
+            // Cas rare : conflit mais société non trouvée, réessayer avec un délai
+            console.log(`⚠️ Conflit sans société trouvée, attente et nouvel essai...`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            result = await db
+              .insert(companies)
+              .values({
+                projectId: project[0].id,
+                name: company.name,
+                siret: company.siret || null,
+                reputationScore: company.reputationScore,
+                reputationJustification: company.reputationJustification,
+              })
+              .returning();
+            
+            console.log(`✅ Société créée après retry: ${company.name}`);
+            createdCompanies.push(result[0]);
+          }
+        }
         
-        createdCompanies.push(updatedCompany[0]);
-      } else {
-        // Créer une nouvelle société
-        const newCompany = await db
-          .insert(companies)
-          .values({
-            projectId: project[0].id,
-            name: company.name,
-            siret: company.siret || null, // SIRET optionnel
-            reputationScore: company.reputationScore,
-            reputationJustification: company.reputationJustification,
-          })
-          .returning();
-        
-        createdCompanies.push(newCompany[0]);
+      } catch (companyError: any) {
+        console.error(`❌ Erreur lors du traitement de la société ${company.name}:`, companyError.message);
+        throw new Error(`Erreur lors du traitement de la société "${company.name}": ${companyError.message}`);
       }
     }
 

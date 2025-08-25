@@ -124,11 +124,14 @@ export const companies = pgTable('companies', {
   id: uuid('id').primaryKey().defaultRandom(),
   projectId: uuid('project_id').references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 512 }).notNull(),
-  siret: varchar('siret', { length: 14 }).unique(), // SIRET optionnel et unique si fourni
+  siret: varchar('siret', { length: 50 }), // SIRET/identifiant société optionnel, format flexible
   reputationScore: integer('reputation_score'), // Score sur 10 pour la réputation
   reputationJustification: text('reputation_justification'), // Justification détaillée de l'IA
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  // Contrainte unique : une seule société par nom et par projet (gestion robuste au niveau application)
+  uniqueCompanyPerProject: unique().on(table.projectId, table.name),
+}));
 
 // Documents Table - Files attached to sessions, stored in AWS S3
 export const documents = pgTable('documents', {
@@ -337,7 +340,7 @@ export const CreateProjectOwnerSchema = z.object({
 export const CreateCompanySchema = z.object({
   projectUniqueId: z.string().min(1, 'ProjectUniqueId is required'),
   name: z.string().min(1, 'Name is required'),
-  siret: z.string().length(14, 'SIRET must be 14 characters'),
+  siret: z.string().min(1, 'SIRET is required').max(50, 'SIRET too long'),
 });
 
 // Schema for POST /documents
@@ -626,7 +629,7 @@ export const ReputationAnalysisPayloadSchema = z.object({
     })).min(1, 'At least one project owner is required'),
     companies: z.array(z.object({
       name: z.string().min(1, 'Company name is required'),
-      siret: z.string().length(14, 'SIRET must be 14 characters').optional(),
+      siret: z.string().max(50, 'SIRET too long').nullish(),
       reputationScore: z.number().int().min(0).max(10, 'Reputation score must be between 0 and 10'),
       reputationJustification: z.string().min(1, 'Reputation justification is required'),
     })).min(1, 'At least one company is required'),

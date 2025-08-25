@@ -22,6 +22,13 @@
       "when": 1756128857374,
       "tag": "0002_high_peter_quill",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1756130513821,
+      "tag": "0003_wandering_blacklash",
+      "breakpoints": true
     }
   ]
 }
